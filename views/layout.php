@@ -8,7 +8,7 @@ use CaptionIA\Core\View;
 <meta name="color-scheme" content="dark">
 <title><?= View::e($title ?? 'Caption IA') ?></title>
 <meta name="description" content="Caption IA — automação inteligente para edição de vídeo no Adobe Premiere Pro.">
-<link rel="stylesheet" href="/assets/app.css?v=3">
+<link rel="stylesheet" href="/assets/app.css?v=4">
 </head>
 <body>
 <header class="suite-topbar">
@@ -19,9 +19,11 @@ use CaptionIA\Core\View;
 
   <div class="suite-actions">
     <?php if (!empty($currentUser)): ?>
+      <a class="top-buy" href="/#planos">Comprar</a>
       <a href="/minha-conta" class="suite-user"><?= View::e(mb_substr($currentUser['name'] ?? 'Conta', 0, 1)) ?></a>
     <?php else: ?>
       <a class="top-login" href="/entrar">Entrar</a>
+      <a class="top-buy" href="/#planos">Comprar agora</a>
     <?php endif; ?>
   </div>
 </header>
