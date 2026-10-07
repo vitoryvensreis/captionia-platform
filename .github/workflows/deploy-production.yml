@@ -1,0 +1,124 @@
+name: Deploy Production
+
+on:
+  workflow_run:
+    workflows:
+      - "Validate Caption IA Platform"
+    types:
+      - completed
+
+permissions:
+  contents: read
+
+concurrency:
+  group: captionia-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.head_branch == 'main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    env:
+      DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+      DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
+      DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+      DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+      DEPLOY_SHA: ${{ github.event.workflow_run.head_sha }}
+
+    steps:
+      - name: Validate deploy secrets
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$DEPLOY_HOST"
+          test -n "$DEPLOY_PORT"
+          test -n "$DEPLOY_USER"
+          test -n "$DEPLOY_PATH"
+          test -n "${{ secrets.DEPLOY_SSH_KEY }}"
+
+      - name: Prepare SSH
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          printf '%s\n' "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -p "$DEPLOY_PORT" -H "$DEPLOY_HOST" >> ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+
+      - name: Deploy validated commit
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          ssh -i ~/.ssh/id_ed25519             -p "$DEPLOY_PORT"             -o BatchMode=yes             -o StrictHostKeyChecking=yes             "$DEPLOY_USER@$DEPLOY_HOST"             bash -s -- "$DEPLOY_PATH" "$DEPLOY_SHA" <<'REMOTE'
+          set -euo pipefail
+
+          DEPLOY_PATH="$1"
+          DEPLOY_SHA="$2"
+          BACKUP_DIR="$HOME/backups/captionia"
+          TMP_BACKUP_SCRIPT="/tmp/captionia-backup-db-$$.php"
+
+          cd "$DEPLOY_PATH"
+
+          if [ ! -f .env ]; then
+            echo "ERRO: .env não existe em $DEPLOY_PATH" >&2
+            exit 1
+          fi
+
+          OLD_SHA="$(git rev-parse HEAD 2>/dev/null || true)"
+          echo "Deploy: $OLD_SHA -> $DEPLOY_SHA"
+
+          git fetch origin main
+          git cat-file -e "$DEPLOY_SHA^{commit}"
+
+          echo "== Backup do banco =="
+          git show "$DEPLOY_SHA:scripts/backup-db.php" > "$TMP_BACKUP_SCRIPT"
+          php "$TMP_BACKUP_SCRIPT" "$DEPLOY_PATH" "$BACKUP_DIR"
+          rm -f "$TMP_BACKUP_SCRIPT"
+
+          echo "== Atualizando código =="
+          git reset --hard "$DEPLOY_SHA"
+
+          echo "== Composer =="
+          composer install             --no-dev             --no-interaction             --no-progress             --prefer-dist             --optimize-autoloader
+
+          echo "== Banco =="
+          php scripts/install.php
+
+          chmod 600 .env
+          mkdir -p storage/logs storage/cache
+          chmod 770 storage/logs storage/cache
+
+          echo "== Health check local =="
+          HEALTH_OK=0
+          for attempt in 1 2 3 4 5; do
+            if curl --fail --silent --show-error               https://caption.escotilhaprodutora.com/health >/dev/null; then
+              HEALTH_OK=1
+              break
+            fi
+            sleep 3
+          done
+
+          if [ "$HEALTH_OK" -ne 1 ]; then
+            echo "Health check falhou. Restaurando código anterior..." >&2
+            if [ -n "$OLD_SHA" ]; then
+              git reset --hard "$OLD_SHA"
+              composer install                 --no-dev                 --no-interaction                 --no-progress                 --prefer-dist                 --optimize-autoloader || true
+            fi
+            exit 1
+          fi
+
+          echo "Deploy concluído: $DEPLOY_SHA"
+          REMOTE
+
+      - name: Public health check
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error             https://caption.escotilhaprodutora.com/health
