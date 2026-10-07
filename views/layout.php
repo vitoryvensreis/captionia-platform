@@ -8,7 +8,7 @@ use CaptionIA\Core\View;
 <meta name="color-scheme" content="dark">
 <title><?= View::e($title ?? 'Caption IA') ?></title>
 <meta name="description" content="Caption IA — automação inteligente para edição de vídeo no Adobe Premiere Pro.">
-<link rel="stylesheet" href="/assets/app.css?v=2">
+<link rel="stylesheet" href="/assets/app.css?v=3">
 </head>
 <body>
 <header class="suite-topbar">
@@ -16,13 +16,6 @@ use CaptionIA\Core\View;
     <span class="suite-logo">C</span>
     <span>Caption IA</span>
   </a>
-
-  <nav class="suite-apps" aria-label="Recursos">
-    <a href="/#recursos"><span>⚡</span><b>AutoEdit</b></a>
-    <a href="/#recursos"><span>CC</span><b>Legendas</b></a>
-    <a href="/#recursos"><span>✦</span><b>Karaoke</b></a>
-    <a href="/#recursos"><span>♪</span><b>SFX</b></a>
-  </nav>
 
   <div class="suite-actions">
     <?php if (!empty($currentUser)): ?>

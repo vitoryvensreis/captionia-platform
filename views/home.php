@@ -15,14 +15,6 @@ $lifetime = $byCode['lifetime'] ?? ['price_cents' => 7000];
     <div class="hero-kicker">CAPTION IA · PREMIERE PRO</div>
     <h1>Crie. Edite. <span>Entregue mais rápido.</span></h1>
 
-    <div class="hero-command">
-      <div class="command-label">O que você quer acelerar hoje?</div>
-      <div class="command-row">
-        <span>Legendas, AutoEdit, cortes, SFX, karaoke e muito mais.</span>
-        <a class="button" href="#planos">Começar</a>
-      </div>
-    </div>
-
     <div class="hero-tabs">
       <a href="#recursos" class="active">Destaques</a>
       <a href="#recursos">Legendas</a>
