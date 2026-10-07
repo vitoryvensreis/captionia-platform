@@ -1,0 +1,19 @@
+{
+  "name": "escotilha/captionia-platform",
+  "description": "Site, licenças, assinaturas e API do Caption IA",
+  "type": "project",
+  "require": {
+    "php": ">=8.2",
+    "ext-pdo": "*",
+    "ext-json": "*"
+  },
+  "autoload": {
+    "psr-4": {
+      "CaptionIA\\": "app/"
+    }
+  },
+  "config": {
+    "optimize-autoloader": true,
+    "sort-packages": true
+  }
+}
