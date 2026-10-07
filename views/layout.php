@@ -8,6 +8,7 @@ use CaptionIA\Core\View;
 <meta name="color-scheme" content="dark">
 <title><?= View::e($title ?? 'Caption IA') ?></title>
 <meta name="description" content="Caption IA — automação inteligente para edição de vídeo no Adobe Premiere Pro.">
+<link rel="stylesheet" href="/assets/icons/bootstrap-icons.min.css?v=1">
 <link rel="stylesheet" href="/assets/app.css?v=4">
 </head>
 <body>

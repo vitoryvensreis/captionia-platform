@@ -32,16 +32,9 @@ $secondaryPlan = $byCode['lifetime'] ?? ($plans[1] ?? null);
       Automatize partes cansativas da edição com Legendas IA, Karaoke, AutoEdit, AutoCut, SFX e ferramentas de timeline — tudo dentro do seu fluxo no Premiere.
     </p>
 
-    <?php if ($primaryPlan): ?>
+    <?php if ($plans): ?>
       <div class="hero-buy-actions">
-        <a class="button sales-primary" href="<?= View::e($planUrl($primaryPlan)) ?>">
-          Comprar <?= View::e($primaryPlan['name']) ?> · R$ <?= View::e($planPrice($primaryPlan)) ?><?= ($primaryPlan['billing_interval'] ?? '') === 'month' ? '/mês' : '' ?>
-        </a>
-        <?php if ($secondaryPlan && (int) $secondaryPlan['id'] !== (int) $primaryPlan['id']): ?>
-          <a class="button button-ghost sales-secondary" href="<?= View::e($planUrl($secondaryPlan)) ?>">
-            <?= View::e($secondaryPlan['name']) ?> · R$ <?= View::e($planPrice($secondaryPlan)) ?>
-          </a>
-        <?php endif; ?>
+        <a class="button sales-primary" href="#planos">COMPRAR AGORA</a>
       </div>
     <?php endif; ?>
 
