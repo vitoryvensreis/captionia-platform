@@ -8,6 +8,8 @@ use CaptionIA\Services\AuthService;
 use CaptionIA\Services\CheckoutService;
 use CaptionIA\Services\LicenseService;
 use CaptionIA\Services\PagBankService;
+use CaptionIA\Services\PixBacenService;
+use CaptionIA\Services\SettingsService;
 use RuntimeException;
 use Throwable;
 
@@ -18,6 +20,8 @@ final class App
     private PagBankService $pagBank;
     private CheckoutService $checkout;
     private ApiTokenService $tokens;
+    private SettingsService $settings;
+    private PixBacenService $pixBacen;
 
     public function __construct(private readonly string $basePath)
     {
@@ -28,7 +32,15 @@ final class App
         $this->auth = new AuthService();
         $this->licenses = new LicenseService();
         $this->pagBank = new PagBankService($basePath);
-        $this->checkout = new CheckoutService($basePath, $this->pagBank, $this->licenses);
+        $this->settings = new SettingsService();
+        $this->pixBacen = new PixBacenService();
+        $this->checkout = new CheckoutService(
+            $basePath,
+            $this->pagBank,
+            $this->licenses,
+            $this->settings,
+            $this->pixBacen
+        );
         $this->tokens = new ApiTokenService();
     }
 
@@ -41,6 +53,14 @@ final class App
             $path = '/';
         }
 
+        if (str_starts_with($path, '/api/')) {
+            $this->sendApiCorsHeaders();
+            if ($method === 'OPTIONS') {
+                http_response_code(204);
+                return;
+            }
+        }
+
         try {
             if ($path === '/health') {
                 Json::send([
@@ -49,6 +69,7 @@ final class App
                     'time' => date(DATE_ATOM),
                     'pagbank_configured' => $this->pagBank->configured(),
                     'pagbank_checkout_mode' => $this->pagBank->checkoutMode(),
+                    'payment_gateway' => $this->settings->paymentGateway(),
                 ]);
             }
 
@@ -120,6 +141,14 @@ final class App
             }
             if ($method === 'POST' && $path === '/admin/licencas/criar') {
                 $this->adminGrantLicense();
+                return;
+            }
+            if ($method === 'POST' && $path === '/admin/configuracoes/pagamentos') {
+                $this->adminSavePaymentSettings();
+                return;
+            }
+            if ($method === 'POST' && preg_match('#^/admin/pagamentos/([A-Z0-9-]+)/confirmar-pix$#', $path, $m)) {
+                $this->adminConfirmBacenPix($m[1]);
                 return;
             }
             if ($method === 'POST' && preg_match('#^/admin/licencas/(\d+)/(revogar|reativar|resetar-dispositivos)$#', $path, $m)) {
@@ -236,6 +265,7 @@ final class App
             'plan' => $plan,
             'slug' => $slug,
             'pagbankConfigured' => $this->pagBank->configured(),
+            'paymentGateway' => $this->settings->paymentGateway(),
         ]);
     }
 
@@ -351,7 +381,7 @@ final class App
         )->fetchAll();
 
         $orders = $pdo->query(
-            'SELECT co.reference_id,co.status,co.amount_cents,co.created_at,co.paid_at,
+            'SELECT co.reference_id,co.status,co.provider_mode,co.amount_cents,co.created_at,co.paid_at,
                     u.name,u.email,p.name AS plan_name
              FROM checkout_orders co
              JOIN users u ON u.id=co.user_id
@@ -365,7 +395,35 @@ final class App
             'stats' => $stats,
             'users' => $users,
             'orders' => $orders,
+            'paymentSettings' => $this->settings->paymentSettings(),
+            'pagbankConfigured' => $this->pagBank->configured(),
         ]);
+    }
+
+    private function adminSavePaymentSettings(): void
+    {
+        Csrf::validate($_POST['_csrf'] ?? null);
+        $this->auth->requireAdmin();
+
+        $this->settings->savePaymentSettings(
+            (string) ($_POST['gateway'] ?? ''),
+            (string) ($_POST['pix_key'] ?? ''),
+            (string) ($_POST['pix_name'] ?? ''),
+            (string) ($_POST['pix_city'] ?? '')
+        );
+
+        Session::flash('success', 'Forma de pagamento atualizada.');
+        $this->redirect('/admin');
+    }
+
+    private function adminConfirmBacenPix(string $reference): void
+    {
+        Csrf::validate($_POST['_csrf'] ?? null);
+        $admin = $this->auth->requireAdmin();
+
+        $this->checkout->confirmManualBacenPayment($reference, (int) $admin['id']);
+        Session::flash('success', 'Pix confirmado e licença liberada.');
+        $this->redirect('/admin');
     }
 
     private function adminGrantLicense(): void
@@ -427,12 +485,40 @@ final class App
 
     private function api(string $method, string $path): void
     {
+        if ($method === 'GET' && $path === '/api/v1/health') {
+            Json::send([
+                'ok' => true,
+                'api' => 'Caption IA',
+                'version' => 'v1',
+                'server_time' => date(DATE_ATOM),
+            ]);
+        }
+
+        if ($method === 'GET' && $path === '/api/v1/config') {
+            Json::send([
+                'ok' => true,
+                'api_version' => 'v1',
+                'current_version' => Env::get('CAPTIONIA_CURRENT_VERSION', '3.2.3'),
+                'current_major' => Env::int('CAPTIONIA_CURRENT_MAJOR', 3),
+                'endpoints' => [
+                    'login' => '/api/v1/auth/login',
+                    'refresh' => '/api/v1/auth/refresh',
+                    'logout' => '/api/v1/auth/logout',
+                    'me' => '/api/v1/me',
+                    'license' => '/api/v1/license/check',
+                    'devices' => '/api/v1/devices',
+                    'latest_release' => '/api/v1/releases/latest',
+                ],
+            ]);
+        }
+
         if ($method === 'POST' && $path === '/api/v1/auth/login') {
             $data = Json::input();
             $user = $this->auth->authenticateCredentials(
                 (string) ($data['email'] ?? ''),
                 (string) ($data['password'] ?? '')
             );
+
             $deviceUuid = trim((string) ($data['device_uuid'] ?? ''));
             if (strlen($deviceUuid) < 8 || strlen($deviceUuid) > 128) {
                 throw new RuntimeException('device_uuid inválido.');
@@ -443,15 +529,16 @@ final class App
                 $license = $this->licenses->activateDevice(
                     (int) $user['id'],
                     $deviceUuid,
-                    trim((string) ($data['device_name'] ?? 'Computador')),
-                    trim((string) ($data['os'] ?? ''))
+                    mb_substr(trim((string) ($data['device_name'] ?? 'Computador')), 0, 160),
+                    mb_substr(trim((string) ($data['os'] ?? '')), 0, 80)
                 );
             }
 
             $tokens = $this->tokens->issue((int) $user['id'], $deviceUuid);
+
             Json::send([
                 'ok' => true,
-                'user' => ['id' => $user['id'], 'name' => $user['name'], 'email' => $user['email']],
+                'user' => $this->apiUserPayload($user),
                 'license' => $this->licensePayload($license),
             ] + $tokens);
         }
@@ -471,17 +558,28 @@ final class App
             Json::send(['ok' => true]);
         }
 
+        $context = $this->apiAccessContext();
+
+        if ($method === 'GET' && $path === '/api/v1/me') {
+            Json::send([
+                'ok' => true,
+                'user' => $this->apiUserPayload($context['user']),
+                'license' => $this->licensePayload($context['license']),
+                'device_uuid' => $context['token']['device'],
+            ]);
+        }
+
         if (($method === 'GET' || $method === 'POST') && $path === '/api/v1/license/check') {
-            $payload = $this->tokens->verifyAccessToken($this->bearerToken());
-            $license = $this->licenses->activeLicenseForUser((int) $payload['sub']);
-            $version = (string) ($_GET['version'] ?? (Json::input()['version'] ?? Env::get('CAPTIONIA_CURRENT_VERSION', '3.2.3')));
+            $input = $method === 'POST' ? Json::input() : $_GET;
+            $version = (string) ($input['version'] ?? Env::get('CAPTIONIA_CURRENT_VERSION', '3.2.3'));
+            $license = $context['license'];
             $allowed = $license ? $this->licenses->versionAllowed($license, $version) : false;
 
             if ($license) {
                 Database::connection()->prepare(
                     'UPDATE license_devices SET last_seen_at=NOW()
                      WHERE license_id=? AND device_uuid=? AND revoked_at IS NULL'
-                )->execute([$license['id'], $payload['device']]);
+                )->execute([$license['id'], $context['token']['device']]);
             }
 
             Json::send([
@@ -489,10 +587,141 @@ final class App
                 'allowed' => $allowed,
                 'license' => $this->licensePayload($license),
                 'version' => $version,
+                'reason' => $allowed ? null : ($license ? 'version_not_allowed' : 'no_active_license'),
             ]);
         }
 
-        Json::send(['ok' => false, 'error' => 'Endpoint não encontrado.'], 404);
+        if ($method === 'GET' && $path === '/api/v1/devices') {
+            $devices = [];
+            if ($context['license']) {
+                $stmt = Database::connection()->prepare(
+                    'SELECT device_uuid,device_name,os,first_seen_at,last_seen_at,revoked_at
+                     FROM license_devices
+                     WHERE license_id=?
+                     ORDER BY revoked_at IS NULL DESC,last_seen_at DESC'
+                );
+                $stmt->execute([$context['license']['id']]);
+                $devices = $stmt->fetchAll();
+            }
+
+            Json::send([
+                'ok' => true,
+                'max_devices' => (int) ($context['license']['max_devices'] ?? 0),
+                'devices' => $devices,
+            ]);
+        }
+
+        if ($method === 'DELETE' && preg_match('#^/api/v1/devices/([^/]+)$#', $path, $m)) {
+            if (!$context['license']) {
+                throw new RuntimeException('Nenhuma licença ativa encontrada.');
+            }
+
+            $deviceUuid = rawurldecode($m[1]);
+            if ($deviceUuid === (string) $context['token']['device']) {
+                throw new RuntimeException('Não é possível remover o dispositivo da sessão atual.');
+            }
+
+            $pdo = Database::connection();
+            $stmt = $pdo->prepare(
+                'UPDATE license_devices
+                 SET revoked_at=NOW()
+                 WHERE license_id=? AND device_uuid=? AND revoked_at IS NULL'
+            );
+            $stmt->execute([$context['license']['id'], $deviceUuid]);
+
+            $pdo->prepare(
+                'UPDATE refresh_tokens
+                 SET revoked_at=NOW()
+                 WHERE user_id=? AND device_uuid=? AND revoked_at IS NULL'
+            )->execute([$context['user']['id'], $deviceUuid]);
+
+            Json::send(['ok' => true, 'revoked' => $stmt->rowCount() > 0]);
+        }
+
+        if ($method === 'GET' && $path === '/api/v1/releases/latest') {
+            $license = $context['license'];
+            if (!$license) {
+                Json::send([
+                    'ok' => true,
+                    'available' => false,
+                    'reason' => 'no_active_license',
+                ]);
+            }
+
+            $stmt = Database::connection()->query(
+                'SELECT version,major_version,file_path,published_at
+                 FROM releases
+                 WHERE active=1
+                 ORDER BY published_at DESC,id DESC
+                 LIMIT 1'
+            );
+            $release = $stmt->fetch();
+
+            if (!$release) {
+                $release = [
+                    'version' => Env::get('CAPTIONIA_CURRENT_VERSION', '3.2.3'),
+                    'major_version' => Env::int('CAPTIONIA_CURRENT_MAJOR', 3),
+                    'file_path' => null,
+                    'published_at' => null,
+                ];
+            }
+
+            $allowed = $this->licenses->versionAllowed($license, (string) $release['version']);
+
+            Json::send([
+                'ok' => true,
+                'available' => $allowed,
+                'release' => [
+                    'version' => $release['version'],
+                    'major_version' => (int) $release['major_version'],
+                    'download_url' => $allowed && !empty($release['file_path'])
+                        ? rtrim(Env::get('APP_URL', '') ?: '', '/') . '/downloads/' . rawurlencode((string) $release['version'])
+                        : null,
+                    'published_at' => $release['published_at'],
+                ],
+            ]);
+        }
+
+        Json::send(['ok' => false, 'error' => 'Endpoint não encontrado.', 'code' => 'not_found'], 404);
+    }
+
+    private function apiAccessContext(): array
+    {
+        $token = $this->tokens->verifyAccessToken($this->bearerToken());
+        $stmt = Database::connection()->prepare(
+            'SELECT id,name,email,role,status,created_at FROM users WHERE id=? LIMIT 1'
+        );
+        $stmt->execute([(int) $token['sub']]);
+        $user = $stmt->fetch();
+
+        if (!$user || $user['status'] !== 'active') {
+            throw new RuntimeException('Usuário indisponível.');
+        }
+
+        return [
+            'token' => $token,
+            'user' => $user,
+            'license' => $this->licenses->activeLicenseForUser((int) $user['id']),
+        ];
+    }
+
+    private function apiUserPayload(array $user): array
+    {
+        return [
+            'id' => (int) $user['id'],
+            'name' => (string) $user['name'],
+            'email' => (string) $user['email'],
+            'role' => (string) ($user['role'] ?? 'customer'),
+        ];
+    }
+
+    private function sendApiCorsHeaders(): void
+    {
+        header('Access-Control-Allow-Origin: *');
+        header('Access-Control-Allow-Headers: Authorization, Content-Type, X-Client-Version');
+        header('Access-Control-Allow-Methods: GET, POST, DELETE, OPTIONS');
+        header('Access-Control-Max-Age: 86400');
+        header('Vary: Origin');
     }
 
     private function plans(): array

@@ -151,6 +151,18 @@ CREATE TABLE IF NOT EXISTS webhook_events (
     INDEX idx_webhooks_status_created (status,created_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+CREATE TABLE IF NOT EXISTS app_settings (
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    setting_key VARCHAR(80) NOT NULL UNIQUE,
+    setting_value TEXT NULL,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+INSERT IGNORE INTO app_settings (setting_key,setting_value,updated_at) VALUES
+('payment_gateway','bacen_pix',NOW()),
+('bacen_pix_name','CAPTION IA',NOW()),
+('bacen_pix_city','FORTALEZA',NOW());
+
 CREATE TABLE IF NOT EXISTS releases (
     id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     version VARCHAR(30) NOT NULL UNIQUE,

@@ -152,3 +152,45 @@ O vitalício é limitado pela geração principal comprada; o mensal ativo aceit
 O deploy executa `php scripts/admin-selftest.php` após as migrations. O script valida tabelas/colunas e executa as mesmas consultas principais usadas pelo dashboard, sem alterar dados.
 
 O endpoint `/admin` exige usuário autenticado com `role=admin`. Sem sessão, deve redirecionar para `/entrar`.
+
+
+## Pix direto / BR Code
+
+O Admin pode escolher em `/admin` entre:
+
+- `PagBank`: checkout hospedado e confirmação automática por webhook.
+- `Pix direto`: BR Code estático conforme o padrão Pix/BR Code, com valor e TXID do pedido.
+
+O Pix direto usa:
+
+```dotenv
+PAYMENT_GATEWAY=bacen_pix
+BACEN_PIX_KEY=
+BACEN_PIX_NAME=CAPTION IA
+BACEN_PIX_CITY=FORTALEZA
+BACEN_PIX_ORDER_EXPIRATION_MINUTES=1440
+```
+
+Por privacidade, a chave Pix não deve ser versionada no Git. Configure-a pelo painel Admin ou no `.env`.
+
+No modo Pix direto, o site não possui acesso ao extrato bancário. Portanto, a confirmação do recebimento é manual no painel Admin. Ao confirmar, o sistema registra a transação e libera a licença idempotentemente.
+
+## API v1 para o plugin
+
+Endpoints públicos:
+
+- `GET /api/v1/health`
+- `GET /api/v1/config`
+- `POST /api/v1/auth/login`
+- `POST /api/v1/auth/refresh`
+- `POST /api/v1/auth/logout`
+
+Endpoints com Bearer token:
+
+- `GET /api/v1/me`
+- `GET|POST /api/v1/license/check`
+- `GET /api/v1/devices`
+- `DELETE /api/v1/devices/{device_uuid}`
+- `GET /api/v1/releases/latest`
+
+A API usa CORS sem cookies, access token curto e refresh token rotativo. O plugin deve persistir `device_uuid` e `refresh_token` com armazenamento seguro do sistema operacional.

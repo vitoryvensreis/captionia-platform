@@ -13,15 +13,32 @@
         document.execCommand('copy');
       }
       const old = copy.textContent;
-      copy.textContent = 'PIX copiado ✓';
+      copy.textContent = 'Pix copiado ✓';
       setTimeout(() => { copy.textContent = old; }, 1800);
     });
+  }
+
+  const qrTarget = document.querySelector('[data-pix-qrcode]');
+  if (qrTarget && window.QRCode) {
+    const payload = qrTarget.dataset.pixQrcode || '';
+    if (payload) {
+      qrTarget.innerHTML = '';
+      new QRCode(qrTarget, {
+        text: payload,
+        width: 196,
+        height: 196,
+        colorDark: '#000000',
+        colorLight: '#ffffff',
+        correctLevel: QRCode.CorrectLevel.M
+      });
+    }
   }
 
   const payment = document.querySelector('[data-payment-reference]');
   if (payment && payment.dataset.paymentFinal !== '1') {
     const ref = payment.dataset.paymentReference;
     let attempts = 0;
+
     const check = async () => {
       attempts++;
       try {
@@ -30,17 +47,23 @@
           cache: 'no-store'
         });
         const data = await response.json();
+
         if (data.paid && data.redirect) {
           window.location.href = data.redirect;
           return;
         }
-        if (['declined','cancelled','expired','failed'].includes(data.status)) {
+
+        if (['declined', 'cancelled', 'expired', 'failed'].includes(data.status)) {
           window.location.reload();
           return;
         }
       } catch (_) {}
-      if (attempts < 180) setTimeout(check, 4000);
+
+      if (attempts < 360) {
+        setTimeout(check, 5000);
+      }
     };
-    setTimeout(check, 3500);
+
+    setTimeout(check, 4000);
   }
 })();

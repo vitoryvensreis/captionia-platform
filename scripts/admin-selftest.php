@@ -18,6 +18,7 @@ $requiredTables = [
     'checkout_orders',
     'payment_transactions',
     'webhook_events',
+    'app_settings',
 ];
 
 $missing = [];
@@ -54,6 +55,15 @@ foreach ($requiredColumns as [$table, $column]) {
         fwrite(STDERR, "Coluna ausente: {$table}.{$column}" . PHP_EOL);
         exit(1);
     }
+}
+
+$settingStmt = $pdo->prepare("SELECT setting_value FROM app_settings WHERE setting_key='payment_gateway' LIMIT 1");
+$settingStmt->execute();
+$paymentGateway = (string) ($settingStmt->fetchColumn() ?: '');
+
+if (!in_array($paymentGateway, ['pagbank', 'bacen_pix'], true)) {
+    fwrite(STDERR, "payment_gateway inválido ou ausente." . PHP_EOL);
+    exit(1);
 }
 
 $stats = [
@@ -97,4 +107,5 @@ echo json_encode([
     'admins' => $stats['admins'],
     'users' => $stats['users'],
     'active_licenses' => $stats['licenses'],
+    'payment_gateway' => $paymentGateway,
 ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) . PHP_EOL;

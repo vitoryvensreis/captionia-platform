@@ -12,7 +12,9 @@ final class CheckoutService
     public function __construct(
         private readonly string $basePath,
         private readonly PagBankService $pagBank,
-        private readonly LicenseService $licenses
+        private readonly LicenseService $licenses,
+        private readonly SettingsService $settings,
+        private readonly PixBacenService $pixBacen
     ) {
     }
 
@@ -28,9 +30,53 @@ final class CheckoutService
 
     public function createForUser(array $user, array $plan): array
     {
-        return $this->pagBank->checkoutMode() === 'hosted'
-            ? $this->createHostedCheckoutForUser($user, $plan)
-            : $this->createPixForUser($user, $plan);
+        return $this->settings->paymentGateway() === 'bacen_pix'
+            ? $this->createBacenPixForUser($user, $plan)
+            : $this->createHostedCheckoutForUser($user, $plan);
+    }
+
+    public function createBacenPixForUser(array $user, array $plan): array
+    {
+        $pixKey = $this->settings->pixKey();
+        if ($pixKey === '') {
+            throw new RuntimeException('O Pix direto ainda não possui uma chave configurada no painel Admin.');
+        }
+
+        $reference = 'CIA-' . strtoupper(bin2hex(random_bytes(8)));
+        $minutes = max(30, min(10080, Env::int('BACEN_PIX_ORDER_EXPIRATION_MINUTES', 1440)));
+        $expiresAt = date('Y-m-d H:i:s', time() + ($minutes * 60));
+        $description = $plan['code'] === 'monthly' ? 'Caption IA Mensal' : 'Caption IA Vitalicio';
+
+        $payload = $this->pixBacen->payload(
+            $pixKey,
+            (int) $plan['price_cents'],
+            $this->settings->pixName(),
+            $this->settings->pixCity(),
+            $reference,
+            $description
+        );
+
+        if (!$this->pixBacen->validatePayload($payload)) {
+            throw new RuntimeException('Falha ao validar o BR Code Pix gerado.');
+        }
+
+        $pdo = Database::connection();
+        $stmt = $pdo->prepare(
+            'INSERT INTO checkout_orders
+             (reference_id,user_id,plan_id,status,amount_cents,provider_mode,qr_code_text,expires_at,created_at,updated_at)
+             VALUES (?,?,?,\'waiting\',?,\'bacen_static_pix\',?,?,NOW(),NOW())'
+        );
+        $stmt->execute([
+            $reference,
+            $user['id'],
+            $plan['id'],
+            $plan['price_cents'],
+            $payload,
+            $expiresAt,
+        ]);
+
+        return $this->findByReference($reference)
+            ?? throw new RuntimeException('Não foi possível criar o pagamento Pix.');
     }
 
     public function createHostedCheckoutForUser(array $user, array $plan): array
@@ -348,6 +394,78 @@ final class CheckoutService
         }
 
         return $fresh;
+    }
+
+    public function confirmManualBacenPayment(string $reference, int $adminUserId): array
+    {
+        $pdo = Database::connection();
+        $pdo->beginTransaction();
+
+        try {
+            $stmt = $pdo->prepare(
+                'SELECT * FROM checkout_orders WHERE reference_id=? FOR UPDATE'
+            );
+            $stmt->execute([$reference]);
+            $order = $stmt->fetch();
+
+            if (!$order) {
+                throw new RuntimeException('Pagamento não encontrado.');
+            }
+            if (($order['provider_mode'] ?? '') !== 'bacen_static_pix') {
+                throw new RuntimeException('Este pagamento não é um Pix direto.');
+            }
+
+            if ($order['status'] !== 'paid') {
+                $pdo->prepare(
+                    'UPDATE checkout_orders
+                     SET status=\'paid\',paid_at=COALESCE(paid_at,NOW()),updated_at=NOW()
+                     WHERE id=?'
+                )->execute([$order['id']]);
+
+                $paymentId = 'BACEN-' . $reference;
+                $pdo->prepare(
+                    'INSERT INTO payment_transactions
+                     (user_id,provider,provider_payment_id,amount_cents,status,payload_json,created_at)
+                     VALUES (?,\'bacen_static_pix\',?,?,\'paid\',?,NOW())
+                     ON DUPLICATE KEY UPDATE status=\'paid\',payload_json=VALUES(payload_json)'
+                )->execute([
+                    $order['user_id'],
+                    $paymentId,
+                    $order['amount_cents'],
+                    json_encode([
+                        'reference_id' => $reference,
+                        'confirmed_by' => $adminUserId,
+                        'mode' => 'manual_admin_confirmation',
+                    ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+                ]);
+
+                $pdo->prepare(
+                    'INSERT INTO audit_logs (user_id,event_type,metadata_json,created_at)
+                     VALUES (?,\'payment.manual_pix_confirmed\',?,NOW())'
+                )->execute([
+                    $adminUserId,
+                    json_encode([
+                        'reference_id' => $reference,
+                        'customer_user_id' => (int) $order['user_id'],
+                        'amount_cents' => (int) $order['amount_cents'],
+                    ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+                ]);
+            }
+
+            $pdo->commit();
+
+            $fresh = $this->findByReference($reference)
+                ?? throw new RuntimeException('Pagamento não encontrado após confirmação.');
+
+            $this->licenses->activatePaidOrder($fresh);
+
+            return $this->findByReference($reference) ?? $fresh;
+        } catch (\Throwable $e) {
+            if ($pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+            throw $e;
+        }
     }
 
     public function ordersForUser(int $userId): array

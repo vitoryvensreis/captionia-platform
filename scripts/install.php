@@ -69,6 +69,12 @@ try {
         $pdo->exec("ALTER TABLE checkout_orders ADD COLUMN hosted_checkout_url TEXT NULL AFTER pagbank_charge_id");
     }
 
+    $adminEmail = mb_strtolower(trim((string) \CaptionIA\Core\Env::get('ADMIN_EMAIL', '')));
+    if ($adminEmail !== '' && filter_var($adminEmail, FILTER_VALIDATE_EMAIL)) {
+        $stmt = $pdo->prepare("UPDATE users SET role='admin',updated_at=NOW() WHERE email=?");
+        $stmt->execute([$adminEmail]);
+    }
+
     echo "Banco Caption IA atualizado com sucesso.\n";
 } catch (\Throwable $e) {
     fwrite(STDERR, "Falha ao atualizar o banco: " . $e->getMessage() . "\n");
