@@ -1,15 +1,26 @@
 <?php
 use CaptionIA\Core\View;
 
+$planUrl = static function (array $plan): string {
+    $code = (string) ($plan['code'] ?? '');
+    $slug = match ($code) {
+        'monthly' => 'mensal',
+        'lifetime' => 'vitalicio',
+        default => $code,
+    };
+    return '/comprar/' . rawurlencode($slug);
+};
+
+$planPrice = static fn(array $plan): string =>
+    number_format(((int) ($plan['price_cents'] ?? 0)) / 100, 0, ',', '.');
+
 $byCode = [];
 foreach ($plans as $plan) {
     $byCode[$plan['code']] = $plan;
 }
-$monthly = $byCode['monthly'] ?? ['price_cents' => 3000];
-$lifetime = $byCode['lifetime'] ?? ['price_cents' => 7000];
 
-$monthlyPrice = number_format(((int) $monthly['price_cents']) / 100, 0, ',', '.');
-$lifetimePrice = number_format(((int) $lifetime['price_cents']) / 100, 0, ',', '.');
+$primaryPlan = $byCode['monthly'] ?? ($plans[0] ?? null);
+$secondaryPlan = $byCode['lifetime'] ?? ($plans[1] ?? null);
 ?>
 <main class="home-main">
 <section class="adobe-inspired-hero sales-hero">
@@ -21,16 +32,24 @@ $lifetimePrice = number_format(((int) $lifetime['price_cents']) / 100, 0, ',', '
       Automatize partes cansativas da edição com Legendas IA, Karaoke, AutoEdit, AutoCut, SFX e ferramentas de timeline — tudo dentro do seu fluxo no Premiere.
     </p>
 
-    <div class="hero-buy-actions">
-      <a class="button sales-primary" href="/comprar/mensal">Começar por R$ <?= $monthlyPrice ?>/mês</a>
-      <a class="button button-ghost sales-secondary" href="/comprar/vitalicio">Vitalício por R$ <?= $lifetimePrice ?></a>
-    </div>
+    <?php if ($primaryPlan): ?>
+      <div class="hero-buy-actions">
+        <a class="button sales-primary" href="<?= View::e($planUrl($primaryPlan)) ?>">
+          Comprar <?= View::e($primaryPlan['name']) ?> · R$ <?= View::e($planPrice($primaryPlan)) ?><?= ($primaryPlan['billing_interval'] ?? '') === 'month' ? '/mês' : '' ?>
+        </a>
+        <?php if ($secondaryPlan && (int) $secondaryPlan['id'] !== (int) $primaryPlan['id']): ?>
+          <a class="button button-ghost sales-secondary" href="<?= View::e($planUrl($secondaryPlan)) ?>">
+            <?= View::e($secondaryPlan['name']) ?> · R$ <?= View::e($planPrice($secondaryPlan)) ?>
+          </a>
+        <?php endif; ?>
+      </div>
+    <?php endif; ?>
 
     <div class="hero-proof-row">
-      <span>✓ Até 2 dispositivos</span>
-      <span>✓ Pagamento por Pix</span>
-      <span>✓ Login persistente</span>
-      <span>✓ Mensal com atualizações</span>
+      <span><i class="bi bi-check-circle"></i> Até 2 dispositivos nos planos atuais</span>
+      <span><i class="bi bi-qr-code"></i> Pagamento por Pix</span>
+      <span><i class="bi bi-shield-check"></i> Login persistente</span>
+      <span><i class="bi bi-arrow-repeat"></i> Atualizações conforme o plano</span>
     </div>
 
     <div class="hero-tabs">
@@ -63,7 +82,9 @@ $lifetimePrice = number_format(((int) $lifetime['price_cents']) / 100, 0, ',', '
     <h2>O Caption IA entra onde o seu fluxo costuma travar.</h2>
     <p>Você continua no controle da edição. O plugin acelera o que pode ser automatizado para você chegar mais rápido ao resultado final.</p>
   </div>
-  <a class="button" href="/comprar/mensal">Quero editar mais rápido</a>
+  <?php if ($primaryPlan): ?>
+    <a class="button" href="<?= View::e($planUrl($primaryPlan)) ?>">Quero editar mais rápido</a>
+  <?php endif; ?>
 </section>
 
 <section class="workspace-section" id="recursos">
@@ -74,18 +95,20 @@ $lifetimePrice = number_format(((int) $lifetime['price_cents']) / 100, 0, ',', '
   </div>
 
   <div class="creative-grid sales-feature-grid">
-    <article class="creative-card"><span class="tool-icon orange">⚡</span><div><b>AutoEdit</b><p>Organize etapas automáticas e deixe o fluxo de edição avançar com menos intervenção manual.</p></div></article>
-    <article class="creative-card"><span class="tool-icon blue">CC</span><div><b>Legendas IA</b><p>Transcreva, segmente e aplique estilos com muito menos trabalho operacional.</p></div></article>
-    <article class="creative-card"><span class="tool-icon violet">✦</span><div><b>Karaoke</b><p>Mantenha a frase visível e destaque a palavra falada para um visual mais dinâmico.</p></div></article>
-    <article class="creative-card"><span class="tool-icon pink">♪</span><div><b>SFX Auto</b><p>Agilize a inserção de efeitos sonoros e dê mais ritmo sem procurar tudo manualmente.</p></div></article>
-    <article class="creative-card"><span class="tool-icon cyan">✂</span><div><b>AutoCut</b><p>Ajude a tratar silêncios, retakes e ritmo para chegar mais rápido à montagem limpa.</p></div></article>
-    <article class="creative-card"><span class="tool-icon lime">↗</span><div><b>Dinâmica</b><p>Use zoom, animações, grids e ferramentas de timeline para conteúdo vertical e social.</p></div></article>
+    <article class="creative-card"><span class="tool-icon orange"><i class="bi bi-lightning-charge-fill"></i></span><div><b>AutoEdit</b><p>Organize etapas automáticas e deixe o fluxo de edição avançar com menos intervenção manual.</p></div></article>
+    <article class="creative-card"><span class="tool-icon blue"><i class="bi bi-badge-cc-fill"></i></span><div><b>Legendas IA</b><p>Transcreva, segmente e aplique estilos com muito menos trabalho operacional.</p></div></article>
+    <article class="creative-card"><span class="tool-icon violet"><i class="bi bi-stars"></i></span><div><b>Karaoke</b><p>Mantenha a frase visível e destaque a palavra falada para um visual mais dinâmico.</p></div></article>
+    <article class="creative-card"><span class="tool-icon pink"><i class="bi bi-music-note-beamed"></i></span><div><b>SFX Auto</b><p>Agilize a inserção de efeitos sonoros e dê mais ritmo sem procurar tudo manualmente.</p></div></article>
+    <article class="creative-card"><span class="tool-icon cyan"><i class="bi bi-scissors"></i></span><div><b>AutoCut</b><p>Ajude a tratar silêncios, retakes e ritmo para chegar mais rápido à montagem limpa.</p></div></article>
+    <article class="creative-card"><span class="tool-icon lime"><i class="bi bi-graph-up-arrow"></i></span><div><b>Dinâmica</b><p>Use zoom, animações, grids e ferramentas de timeline para conteúdo vertical e social.</p></div></article>
   </div>
 
-  <div class="section-cta">
-    <div><b>Menos operação. Mais edição.</b><span>Comece pelo plano mensal e mantenha acesso às atualizações enquanto estiver ativo.</span></div>
-    <a class="button" href="/comprar/mensal">Assinar agora</a>
-  </div>
+  <?php if ($primaryPlan): ?>
+    <div class="section-cta">
+      <div><b>Menos operação. Mais edição.</b><span>Escolha um plano e comece pelo Pix.</span></div>
+      <a class="button" href="<?= View::e($planUrl($primaryPlan)) ?>">Comprar agora</a>
+    </div>
+  <?php endif; ?>
 </section>
 
 <section class="sales-section audience-section" id="para-quem">
@@ -96,74 +119,90 @@ $lifetimePrice = number_format(((int) $lifetime['price_cents']) / 100, 0, ',', '
   </div>
 
   <div class="audience-grid">
-    <span>🎬 Editores de vídeo</span>
-    <span>📹 Videomakers</span>
-    <span>📱 Social Media</span>
-    <span>⚡ Criadores de conteúdo</span>
-    <span>🏢 Agências</span>
-    <span>💻 Freelancers</span>
+    <span><i class="bi bi-film"></i> Editores de vídeo</span>
+    <span><i class="bi bi-camera-reels"></i> Videomakers</span>
+    <span><i class="bi bi-phone"></i> Social Media</span>
+    <span><i class="bi bi-lightning-charge"></i> Criadores de conteúdo</span>
+    <span><i class="bi bi-buildings"></i> Agências</span>
+    <span><i class="bi bi-laptop"></i> Freelancers</span>
   </div>
 </section>
 
+<?php if ($plans): ?>
 <section class="sales-section value-section">
   <div class="value-card">
     <div class="value-copy">
       <div class="eyebrow">CUSTO-BENEFÍCIO</div>
-      <h2>Se uma tarefa repetitiva deixa de ocupar seu tempo, o plugin já começa a fazer sentido.</h2>
-      <p>O Caption IA foi pensado para ser acessível e entrar no fluxo de quem edita com frequência — sem transformar produtividade em um investimento pesado.</p>
+      <h2>Escolha o acesso que faz sentido para o seu ritmo de trabalho.</h2>
+      <p>Os planos são gerenciados pelo próprio Caption IA. Valores, dispositivos e regras de atualização podem variar conforme a oferta ativa.</p>
     </div>
     <div class="value-numbers">
-      <div><strong>R$ <?= $monthlyPrice ?></strong><span>por 30 dias + atualizações</span></div>
-      <div><strong>R$ <?= $lifetimePrice ?></strong><span>uma vez para a geração adquirida</span></div>
-      <div><strong>2</strong><span>dispositivos por licença</span></div>
+      <?php foreach (array_slice($plans, 0, 3) as $plan): ?>
+        <div>
+          <strong>R$ <?= View::e($planPrice($plan)) ?></strong>
+          <span><?= View::e($plan['name']) ?> · até <?= (int) $plan['max_devices'] ?> dispositivo(s)</span>
+        </div>
+      <?php endforeach; ?>
     </div>
   </div>
 </section>
+<?php endif; ?>
 
 <section class="pricing-section sales-pricing" id="planos">
   <div class="section-heading">
     <div class="eyebrow">ESCOLHA E COMECE</div>
     <h2>O acesso está a poucos cliques.</h2>
-    <p>Escolha o plano, crie sua conta, pague por Pix e acompanhe sua licença pela área do cliente.</p>
+    <p>Escolha um plano ativo, crie sua conta, pague por Pix e acompanhe sua licença pela área do cliente.</p>
   </div>
 
-  <div class="pricing-grid">
-    <article class="price-card featured">
-      <div class="plan-badge">RECOMENDADO PARA ATUALIZAÇÕES</div>
-      <h3>Mensal</h3>
-      <div class="price">R$ <?= $monthlyPrice ?><small>/mês</small></div>
-      <p>Para quem quer usar o Caption IA continuamente e receber novas versões enquanto a assinatura estiver ativa.</p>
-      <ul>
-        <li>✓ Acesso às funções atuais</li>
-        <li>✓ Atualizações incluídas enquanto ativo</li>
-        <li>✓ Novos recursos e melhorias</li>
-        <li>✓ Até 2 dispositivos</li>
-      </ul>
-      <a class="button button-wide plan-cta" href="/comprar/mensal">Quero assinar por R$ <?= $monthlyPrice ?></a>
-      <small class="plan-microcopy">Licença válida por 30 dias.</small>
-    </article>
-
-    <article class="price-card">
-      <div class="plan-badge plan-badge-neutral">PAGAMENTO ÚNICO</div>
-      <h3>Vitalício</h3>
-      <div class="price">R$ <?= $lifetimePrice ?></div>
-      <p>Para quem prefere pagar uma vez e manter para sempre a geração principal disponível no momento da compra.</p>
-      <ul>
-        <li>✓ Uso permanente da versão adquirida</li>
-        <li>✓ Correções da mesma geração</li>
-        <li>✓ Até 2 dispositivos</li>
-        <li>— Futuras gerações principais não incluídas</li>
-      </ul>
-      <a class="button button-ghost button-wide plan-cta" href="/comprar/vitalicio">Comprar vitalício por R$ <?= $lifetimePrice ?></a>
-      <small class="plan-microcopy">Sem mensalidade para a geração adquirida.</small>
-    </article>
-  </div>
+  <?php if (!$plans): ?>
+    <div class="empty-state">Nenhum plano está disponível neste momento.</div>
+  <?php else: ?>
+    <div class="pricing-grid dynamic-pricing-grid">
+      <?php foreach ($plans as $plan): ?>
+        <?php
+          $isFeatured = (int) ($plan['featured'] ?? 0) === 1;
+          $intervalLabel = match ($plan['billing_interval'] ?? '') {
+              'month' => '/mês',
+              'year' => '/ano',
+              default => '',
+          };
+          $description = trim((string) ($plan['description'] ?? ''));
+          if ($description === '') {
+              $description = ($plan['type'] ?? '') === 'lifetime'
+                  ? 'Pagamento único para uso permanente da geração principal adquirida.'
+                  : 'Acesso por assinatura ao Caption IA.';
+          }
+        ?>
+        <article class="price-card <?= $isFeatured ? 'featured' : '' ?>">
+          <?php if ($isFeatured): ?><div class="plan-badge">DESTAQUE</div><?php endif; ?>
+          <h3><?= View::e($plan['name']) ?></h3>
+          <div class="price">R$ <?= View::e($planPrice($plan)) ?><small><?= View::e($intervalLabel) ?></small></div>
+          <p><?= View::e($description) ?></p>
+          <ul>
+            <li><i class="bi bi-check-lg"></i> Até <?= (int) $plan['max_devices'] ?> dispositivo(s)</li>
+            <li><i class="bi bi-check-lg"></i> <?= (int) $plan['includes_updates'] === 1 ? 'Atualizações incluídas' : 'Atualizações conforme a geração adquirida' ?></li>
+            <li><i class="bi bi-check-lg"></i> Acesso ao Caption IA conforme a licença</li>
+            <li><i class="bi bi-check-lg"></i> Gestão pela sua conta</li>
+          </ul>
+          <a class="button <?= $isFeatured ? '' : 'button-ghost' ?> button-wide plan-cta" href="<?= View::e($planUrl($plan)) ?>">
+            Comprar por R$ <?= View::e($planPrice($plan)) ?>
+          </a>
+          <small class="plan-microcopy">
+            <?= ($plan['type'] ?? '') === 'lifetime'
+              ? 'Pagamento único para a geração adquirida.'
+              : (($plan['billing_interval'] ?? '') === 'year' ? 'Licença anual.' : 'Licença por 30 dias.') ?>
+          </small>
+        </article>
+      <?php endforeach; ?>
+    </div>
+  <?php endif; ?>
 
   <div class="buy-confidence">
-    <span>✓ Compra rápida</span>
-    <span>✓ Pagamento por Pix</span>
-    <span>✓ Licença vinculada à sua conta</span>
-    <span>✓ Controle de dispositivos</span>
+    <span><i class="bi bi-check-circle"></i> Compra rápida</span>
+    <span><i class="bi bi-qr-code"></i> Pagamento por Pix</span>
+    <span><i class="bi bi-person-check"></i> Licença vinculada à sua conta</span>
+    <span><i class="bi bi-display"></i> Controle de dispositivos</span>
   </div>
 </section>
 
@@ -188,13 +227,13 @@ $lifetimePrice = number_format(((int) $lifetime['price_cents']) / 100, 0, ',', '
   </div>
 
   <details><summary>Preciso entrar toda vez que abrir o Premiere?</summary><p>Não. O sistema foi preparado para manter a sessão e renovar o acesso sem pedir login a cada abertura, enquanto a sessão continuar válida.</p></details>
-  <details><summary>Posso usar em mais de um computador?</summary><p>Sim. Cada licença permite uso em até 2 dispositivos.</p></details>
-  <details><summary>O mensal recebe atualizações?</summary><p>Sim. Enquanto a licença mensal estiver ativa, ela inclui acesso às atualizações disponibilizadas para o plano.</p></details>
-  <details><summary>O vitalício recebe futuras versões principais?</summary><p>Não. O vitalício mantém a geração principal adquirida e as correções compatíveis com essa geração.</p></details>
-  <details><summary>Como funciona o pagamento?</summary><p>O sistema aceita Pix. O método exibido na compra depende da configuração ativa no painel administrativo.</p></details>
+  <details><summary>Posso usar em mais de um computador?</summary><p>O limite depende do plano escolhido e é mostrado antes da compra.</p></details>
+  <details><summary>O plano recebe atualizações?</summary><p>Depende da configuração do plano. Essa informação aparece no card de compra.</p></details>
+  <details><summary>Como funciona o pagamento?</summary><p>O sistema aceita Pix. O método exibido depende da configuração ativa no painel administrativo.</p></details>
   <details><summary>Quando minha licença fica disponível?</summary><p>No pagamento automático, após a confirmação do gateway. No Pix direto, após a confirmação do recebimento pelo administrador.</p></details>
 </section>
 
+<?php if ($primaryPlan): ?>
 <section class="final-cta">
   <div>
     <div class="eyebrow">COMECE AGORA</div>
@@ -202,9 +241,12 @@ $lifetimePrice = number_format(((int) $lifetime['price_cents']) / 100, 0, ',', '
     <p>Coloque o Caption IA no seu fluxo e deixe as tarefas repetitivas ocuparem menos espaço na sua edição.</p>
   </div>
   <div class="final-cta-actions">
-    <a class="button" href="/comprar/mensal">Assinar por R$ <?= $monthlyPrice ?>/mês</a>
-    <a class="button button-ghost" href="/comprar/vitalicio">Vitalício por R$ <?= $lifetimePrice ?></a>
-    <small>Compra por Pix · até 2 dispositivos</small>
+    <a class="button" href="<?= View::e($planUrl($primaryPlan)) ?>">Comprar <?= View::e($primaryPlan['name']) ?></a>
+    <?php if ($secondaryPlan && (int) $secondaryPlan['id'] !== (int) $primaryPlan['id']): ?>
+      <a class="button button-ghost" href="<?= View::e($planUrl($secondaryPlan)) ?>">Ver <?= View::e($secondaryPlan['name']) ?></a>
+    <?php endif; ?>
+    <small>Compra por Pix · licença vinculada à sua conta</small>
   </div>
 </section>
+<?php endif; ?>
 </main>

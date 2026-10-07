@@ -109,11 +109,11 @@ final class App
                 $this->redirect('/');
             }
 
-            if ($method === 'GET' && preg_match('#^/comprar/(mensal|vitalicio)$#', $path, $m)) {
+            if ($method === 'GET' && preg_match('#^/comprar/([a-z0-9][a-z0-9_-]{1,49})$#', $path, $m)) {
                 $this->checkoutPage($m[1]);
                 return;
             }
-            if ($method === 'POST' && preg_match('#^/comprar/(mensal|vitalicio)/(checkout|pix)$#', $path, $m)) {
+            if ($method === 'POST' && preg_match('#^/comprar/([a-z0-9][a-z0-9_-]{1,49})/(checkout|pix)$#', $path, $m)) {
                 $this->createCheckout($m[1]);
                 return;
             }
@@ -141,6 +141,14 @@ final class App
             }
             if ($method === 'POST' && $path === '/admin/licencas/criar') {
                 $this->adminGrantLicense();
+                return;
+            }
+            if ($method === 'POST' && $path === '/admin/planos/criar') {
+                $this->adminCreatePlan();
+                return;
+            }
+            if ($method === 'POST' && preg_match('#^/admin/planos/(\d+)/editar$#', $path, $m)) {
+                $this->adminUpdatePlan((int) $m[1]);
                 return;
             }
             if ($method === 'POST' && $path === '/admin/configuracoes/pagamentos') {
@@ -349,6 +357,7 @@ final class App
             'license' => $license,
             'devices' => $devices,
             'orders' => $this->checkout->ordersForUser((int) $user['id']),
+            'plans' => $this->plans(),
         ]);
     }
 
@@ -360,8 +369,8 @@ final class App
         $stats = [
             'users' => (int) $pdo->query('SELECT COUNT(*) FROM users')->fetchColumn(),
             'licenses' => (int) $pdo->query("SELECT COUNT(*) FROM licenses WHERE status='active' AND (expires_at IS NULL OR expires_at>NOW())")->fetchColumn(),
-            'monthly' => (int) $pdo->query("SELECT COUNT(*) FROM licenses l JOIN plans p ON p.id=l.plan_id WHERE l.status='active' AND p.code='monthly' AND l.expires_at>NOW()")->fetchColumn(),
-            'lifetime' => (int) $pdo->query("SELECT COUNT(*) FROM licenses l JOIN plans p ON p.id=l.plan_id WHERE l.status='active' AND p.code='lifetime'")->fetchColumn(),
+            'subscriptions' => (int) $pdo->query("SELECT COUNT(*) FROM licenses l JOIN plans p ON p.id=l.plan_id WHERE l.status='active' AND p.type='subscription' AND l.expires_at>NOW()")->fetchColumn(),
+            'lifetime' => (int) $pdo->query("SELECT COUNT(*) FROM licenses l JOIN plans p ON p.id=l.plan_id WHERE l.status='active' AND p.type='lifetime'")->fetchColumn(),
             'paid_cents' => (int) $pdo->query("SELECT COALESCE(SUM(amount_cents),0) FROM payment_transactions WHERE status='paid'")->fetchColumn(),
         ];
 
@@ -389,12 +398,17 @@ final class App
              ORDER BY co.created_at DESC LIMIT 50'
         )->fetchAll();
 
+        $plans = $pdo->query(
+            'SELECT * FROM plans ORDER BY active DESC,sort_order ASC,price_cents ASC,id ASC'
+        )->fetchAll();
+
         $this->render('admin/dashboard', [
             'title' => 'Admin — Caption IA',
             'user' => $admin,
             'stats' => $stats,
             'users' => $users,
             'orders' => $orders,
+            'plans' => $plans,
             'paymentSettings' => $this->settings->paymentSettings(),
             'pagbankConfigured' => $this->pagBank->configured(),
         ]);
@@ -426,15 +440,87 @@ final class App
         $this->redirect('/admin');
     }
 
+    private function adminCreatePlan(): void
+    {
+        Csrf::validate($_POST['_csrf'] ?? null);
+        $this->auth->requireAdmin();
+
+        $data = $this->validatedPlanInput(true);
+        $pdo = Database::connection();
+
+        $exists = $pdo->prepare('SELECT id FROM plans WHERE code=? LIMIT 1');
+        $exists->execute([$data['code']]);
+        if ($exists->fetchColumn()) {
+            throw new RuntimeException('Já existe um plano com esse código.');
+        }
+
+        $pdo->prepare(
+            'INSERT INTO plans
+             (code,name,description,type,price_cents,billing_interval,max_devices,includes_updates,featured,sort_order,active,created_at)
+             VALUES (?,?,?,?,?,?,?,?,?,?,?,NOW())'
+        )->execute([
+            $data['code'],
+            $data['name'],
+            $data['description'],
+            $data['type'],
+            $data['price_cents'],
+            $data['billing_interval'],
+            $data['max_devices'],
+            $data['includes_updates'],
+            $data['featured'],
+            $data['sort_order'],
+            $data['active'],
+        ]);
+
+        Session::flash('success', 'Plano criado com sucesso.');
+        $this->redirect('/admin');
+    }
+
+    private function adminUpdatePlan(int $planId): void
+    {
+        Csrf::validate($_POST['_csrf'] ?? null);
+        $this->auth->requireAdmin();
+
+        $pdo = Database::connection();
+        $exists = $pdo->prepare('SELECT id FROM plans WHERE id=? LIMIT 1');
+        $exists->execute([$planId]);
+        if (!$exists->fetchColumn()) {
+            throw new RuntimeException('Plano não encontrado.');
+        }
+
+        $data = $this->validatedPlanInput(false);
+        $pdo->prepare(
+            'UPDATE plans
+             SET name=?,description=?,type=?,price_cents=?,billing_interval=?,max_devices=?,
+                 includes_updates=?,featured=?,sort_order=?,active=?
+             WHERE id=?'
+        )->execute([
+            $data['name'],
+            $data['description'],
+            $data['type'],
+            $data['price_cents'],
+            $data['billing_interval'],
+            $data['max_devices'],
+            $data['includes_updates'],
+            $data['featured'],
+            $data['sort_order'],
+            $data['active'],
+            $planId,
+        ]);
+
+        Session::flash('success', 'Plano atualizado.');
+        $this->redirect('/admin');
+    }
+
     private function adminGrantLicense(): void
     {
         Csrf::validate($_POST['_csrf'] ?? null);
         $this->auth->requireAdmin();
 
         $email = mb_strtolower(trim((string) ($_POST['email'] ?? '')));
-        $plan = (string) ($_POST['plan'] ?? '');
+        $plan = strtolower(trim((string) ($_POST['plan'] ?? '')));
 
-        if (!in_array($plan, ['monthly', 'lifetime'], true)) {
+        if (!preg_match('/^[a-z0-9][a-z0-9_-]{1,49}$/', $plan)) {
             throw new RuntimeException('Plano inválido.');
         }
 
@@ -448,6 +534,83 @@ final class App
         $this->licenses->grantManual($userId, $plan);
         Session::flash('success', 'Licença criada com sucesso.');
         $this->redirect('/admin');
+    }
+
+    private function validatedPlanInput(bool $requireCode): array
+    {
+        $code = strtolower(trim((string) ($_POST['code'] ?? '')));
+        $name = trim((string) ($_POST['name'] ?? ''));
+        $description = trim((string) ($_POST['description'] ?? ''));
+        $type = (string) ($_POST['type'] ?? 'subscription');
+        $billingInterval = (string) ($_POST['billing_interval'] ?? 'month');
+        $priceCents = $this->moneyToCents((string) ($_POST['price'] ?? '0'));
+        $maxDevices = (int) ($_POST['max_devices'] ?? 2);
+        $sortOrder = (int) ($_POST['sort_order'] ?? 0);
+        $includesUpdates = isset($_POST['includes_updates']) ? 1 : 0;
+        $featured = isset($_POST['featured']) ? 1 : 0;
+        $active = isset($_POST['active']) ? 1 : 0;
+
+        if ($requireCode && !preg_match('/^[a-z0-9][a-z0-9_-]{1,49}$/', $code)) {
+            throw new RuntimeException('Use um código de plano com 2 a 50 caracteres: letras minúsculas, números, hífen ou underline.');
+        }
+        if ($name === '' || mb_strlen($name) > 100) {
+            throw new RuntimeException('O nome do plano deve ter entre 1 e 100 caracteres.');
+        }
+        if (mb_strlen($description) > 255) {
+            throw new RuntimeException('A descrição do plano deve ter no máximo 255 caracteres.');
+        }
+        if (!in_array($type, ['subscription', 'lifetime'], true)) {
+            throw new RuntimeException('Tipo de plano inválido.');
+        }
+        if ($type === 'lifetime') {
+            $billingInterval = 'once';
+        } elseif (!in_array($billingInterval, ['month', 'year'], true)) {
+            throw new RuntimeException('Assinaturas devem ser mensais ou anuais.');
+        }
+        if ($priceCents < 100) {
+            throw new RuntimeException('O plano deve custar pelo menos R$ 1,00.');
+        }
+        if ($maxDevices < 1 || $maxDevices > 20) {
+            throw new RuntimeException('O limite de dispositivos deve ficar entre 1 e 20.');
+        }
+        if ($sortOrder < -999 || $sortOrder > 999) {
+            throw new RuntimeException('A ordem do plano deve ficar entre -999 e 999.');
+        }
+
+        return [
+            'code' => $code,
+            'name' => $name,
+            'description' => $description !== '' ? $description : null,
+            'type' => $type,
+            'price_cents' => $priceCents,
+            'billing_interval' => $billingInterval,
+            'max_devices' => $maxDevices,
+            'includes_updates' => $includesUpdates,
+            'featured' => $featured,
+            'sort_order' => $sortOrder,
+            'active' => $active,
+        ];
+    }
+
+    private function moneyToCents(string $value): int
+    {
+        $value = trim($value);
+        $value = preg_replace('/[^0-9,.]/', '', $value) ?? '';
+
+        if ($value === '') {
+            return 0;
+        }
+
+        if (str_contains($value, ',') && str_contains($value, '.')) {
+            $value = str_replace('.', '', $value);
+        }
+        $value = str_replace(',', '.', $value);
+
+        if (!is_numeric($value)) {
+            return 0;
+        }
+
+        return (int) round(((float) $value) * 100);
     }
 
     private function adminLicenseAction(int $licenseId, string $action): void
@@ -508,8 +671,25 @@ final class App
                     'license' => '/api/v1/license/check',
                     'devices' => '/api/v1/devices',
                     'latest_release' => '/api/v1/releases/latest',
+                    'plans' => '/api/v1/plans',
                 ],
             ]);
+        }
+
+        if ($method === 'GET' && $path === '/api/v1/plans') {
+            $plans = array_map(static fn(array $plan): array => [
+                'code' => $plan['code'],
+                'name' => $plan['name'],
+                'description' => $plan['description'] ?? null,
+                'type' => $plan['type'],
+                'price_cents' => (int) $plan['price_cents'],
+                'billing_interval' => $plan['billing_interval'],
+                'max_devices' => (int) $plan['max_devices'],
+                'includes_updates' => (bool) $plan['includes_updates'],
+                'featured' => (bool) ($plan['featured'] ?? false),
+            ], $this->plans());
+
+            Json::send(['ok' => true, 'plans' => $plans]);
         }
 
         if ($method === 'POST' && $path === '/api/v1/auth/login') {
@@ -728,23 +908,37 @@ final class App
     {
         try {
             return Database::connection()
-                ->query('SELECT * FROM plans WHERE active=1 ORDER BY price_cents ASC')
+                ->query('SELECT * FROM plans WHERE active=1 ORDER BY featured DESC,sort_order ASC,price_cents ASC,id ASC')
                 ->fetchAll();
         } catch (Throwable) {
             return [
                 [
+                    'id' => 0,
                     'code' => 'monthly',
                     'name' => 'Caption IA Mensal',
+                    'description' => 'Acesso por assinatura mensal.',
                     'type' => 'subscription',
                     'price_cents' => 3000,
+                    'billing_interval' => 'month',
+                    'max_devices' => 2,
                     'includes_updates' => 1,
+                    'featured' => 1,
+                    'sort_order' => 10,
+                    'active' => 1,
                 ],
                 [
+                    'id' => 1,
                     'code' => 'lifetime',
                     'name' => 'Caption IA Vitalício',
+                    'description' => 'Pagamento único para a geração adquirida.',
                     'type' => 'lifetime',
                     'price_cents' => 7000,
+                    'billing_interval' => 'once',
+                    'max_devices' => 2,
                     'includes_updates' => 0,
+                    'featured' => 0,
+                    'sort_order' => 20,
+                    'active' => 1,
                 ],
             ];
         }
@@ -773,16 +967,25 @@ final class App
 
     private function planCodeFromSlug(string $slug): ?string
     {
-        return match (strtolower(trim($slug))) {
-            'mensal', 'monthly' => 'monthly',
-            'vitalicio', 'vitalício', 'lifetime' => 'lifetime',
-            default => null,
-        };
+        $slug = strtolower(trim($slug));
+
+        if ($slug === 'mensal') {
+            return 'monthly';
+        }
+        if (in_array($slug, ['vitalicio', 'vitalício'], true)) {
+            return 'lifetime';
+        }
+
+        return preg_match('/^[a-z0-9][a-z0-9_-]{1,49}$/', $slug) ? $slug : null;
     }
 
     private function slugFromPlanCode(string $code): string
     {
-        return $code === 'lifetime' ? 'vitalicio' : 'mensal';
+        return match ($code) {
+            'monthly' => 'mensal',
+            'lifetime' => 'vitalicio',
+            default => $code,
+        };
     }
 
     private function safeNext(mixed $next): string

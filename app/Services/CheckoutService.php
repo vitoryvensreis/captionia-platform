@@ -45,7 +45,7 @@ final class CheckoutService
         $reference = 'CIA-' . strtoupper(bin2hex(random_bytes(8)));
         $minutes = max(30, min(10080, Env::int('BACEN_PIX_ORDER_EXPIRATION_MINUTES', 1440)));
         $expiresAt = date('Y-m-d H:i:s', time() + ($minutes * 60));
-        $description = $plan['code'] === 'monthly' ? 'Caption IA Mensal' : 'Caption IA Vitalicio';
+        $description = mb_substr((string) $plan['name'], 0, 50);
 
         $payload = $this->pixBacen->payload(
             $pixKey,

@@ -63,9 +63,13 @@ final class PagBankService
             'items' => [[
                 'reference_id' => (string) $plan['code'],
                 'name' => (string) $plan['name'],
-                'description' => $plan['code'] === 'monthly'
-                    ? 'Licença Caption IA por 30 dias'
-                    : 'Licença vitalícia da geração adquirida do Caption IA',
+                'description' => mb_substr(
+                    trim((string) ($plan['description'] ?? '')) !== ''
+                        ? (string) $plan['description']
+                        : (string) $plan['name'],
+                    0,
+                    100
+                ),
                 'quantity' => 1,
                 'unit_amount' => (int) $plan['price_cents'],
             ]],

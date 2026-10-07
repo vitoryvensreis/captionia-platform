@@ -1,5 +1,15 @@
 <?php
 use CaptionIA\Core\View;
+
+$planUrl = static function (array $plan): string {
+    $code = (string) ($plan['code'] ?? '');
+    $slug = match ($code) {
+        'monthly' => 'mensal',
+        'lifetime' => 'vitalicio',
+        default => $code,
+    };
+    return '/comprar/' . rawurlencode($slug);
+};
 ?>
 <main class="dashboard-wrap">
 <section class="dashboard-head">
@@ -9,7 +19,7 @@ use CaptionIA\Core\View;
     <p><?= View::e($user['email']) ?></p>
   </div>
   <?php if ($license): ?>
-    <div class="license-badge active">● Licença ativa</div>
+    <div class="license-badge active"><i class="bi bi-check-circle"></i> Licença ativa</div>
   <?php else: ?>
     <div class="license-badge">Sem licença ativa</div>
   <?php endif; ?>
@@ -23,15 +33,20 @@ use CaptionIA\Core\View;
       <dl class="data-list">
         <div><dt>Status</dt><dd>Ativa</dd></div>
         <div><dt>Dispositivos</dt><dd><?= count(array_filter($devices, fn($d) => $d['revoked_at'] === null)) ?> / <?= (int) $license['max_devices'] ?></dd></div>
-        <div><dt>Atualizações</dt><dd><?= (int) $license['includes_updates'] === 1 ? 'Incluídas' : 'Até a geração ' . View::e($license['max_major_version']) . '.x' ?></dd></div>
-        <div><dt>Validade</dt><dd><?= $license['expires_at'] ? View::e(date('d/m/Y H:i', strtotime($license['expires_at']))) : 'Vitalícia' ?></dd></div>
+        <div><dt>Atualizações</dt><dd><?= (int) $license['includes_updates'] === 1 ? 'Incluídas' : 'Conforme a geração adquirida' ?></dd></div>
+        <div><dt>Validade</dt><dd><?= $license['expires_at'] ? View::e(date('d/m/Y H:i', strtotime($license['expires_at']))) : 'Sem vencimento' ?></dd></div>
       </dl>
     <?php else: ?>
       <p>Você ainda não tem uma licença ativa.</p>
-      <div class="account-actions">
-        <a class="button" href="/comprar/mensal">Mensal R$ 30</a>
-        <a class="button button-ghost" href="/comprar/vitalicio">Vitalício R$ 70</a>
-      </div>
+      <?php if ($plans): ?>
+        <div class="account-actions">
+          <?php foreach ($plans as $plan): ?>
+            <a class="button <?= (int) ($plan['featured'] ?? 0) === 1 ? '' : 'button-ghost' ?>" href="<?= View::e($planUrl($plan)) ?>">
+              <?= View::e($plan['name']) ?> · R$ <?= number_format(((int) $plan['price_cents']) / 100, 2, ',', '.') ?>
+            </a>
+          <?php endforeach; ?>
+        </div>
+      <?php endif; ?>
     <?php endif; ?>
   </section>
 
@@ -58,16 +73,16 @@ use CaptionIA\Core\View;
     <p class="muted">Nenhum pagamento gerado.</p>
   <?php else: ?>
     <div class="table-wrap">
-      <table>
-        <thead><tr><th>Plano</th><th>Valor</th><th>Status</th><th>Data</th><th></th></tr></thead>
+      <table class="responsive-table">
+        <thead><tr><th>Plano</th><th>Valor</th><th>Status</th><th>Data</th><th>Ação</th></tr></thead>
         <tbody>
           <?php foreach ($orders as $order): ?>
             <tr>
-              <td><?= View::e($order['plan_name']) ?></td>
-              <td>R$ <?= number_format(((int) $order['amount_cents']) / 100, 2, ',', '.') ?></td>
-              <td><span class="status status-<?= View::e($order['status']) ?>"><?= View::e($order['status']) ?></span></td>
-              <td><?= View::e(date('d/m/Y H:i', strtotime($order['created_at']))) ?></td>
-              <td><a href="/pagamento/<?= View::e($order['reference_id']) ?>">Ver</a></td>
+              <td data-label="Plano"><?= View::e($order['plan_name']) ?></td>
+              <td data-label="Valor">R$ <?= number_format(((int) $order['amount_cents']) / 100, 2, ',', '.') ?></td>
+              <td data-label="Status"><span class="status status-<?= View::e($order['status']) ?>"><?= View::e($order['status']) ?></span></td>
+              <td data-label="Data"><?= View::e(date('d/m/Y H:i', strtotime($order['created_at']))) ?></td>
+              <td data-label="Ação"><a href="/pagamento/<?= View::e($order['reference_id']) ?>">Ver</a></td>
             </tr>
           <?php endforeach; ?>
         </tbody>

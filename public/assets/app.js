@@ -34,6 +34,28 @@
     }
   }
 
+  document.querySelectorAll('.plan-admin-form').forEach((form) => {
+    const type = form.querySelector('[data-plan-type]');
+    const interval = form.querySelector('[data-plan-interval]');
+    if (!type || !interval) return;
+
+    const syncPlanFields = () => {
+      const isLifetime = type.value === 'lifetime';
+      if (isLifetime) {
+        interval.value = 'once';
+      } else if (interval.value === 'once') {
+        interval.value = 'month';
+      }
+
+      Array.from(interval.options).forEach((option) => {
+        option.disabled = isLifetime ? option.value !== 'once' : option.value === 'once';
+      });
+    };
+
+    type.addEventListener('change', syncPlanFields);
+    syncPlanFields();
+  });
+
   const payment = document.querySelector('[data-payment-reference]');
   if (payment && payment.dataset.paymentFinal !== '1') {
     const ref = payment.dataset.paymentReference;

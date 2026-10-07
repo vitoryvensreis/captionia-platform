@@ -8,9 +8,18 @@ $isDirectPix = ($paymentGateway ?? 'bacen_pix') === 'bacen_pix';
   <div class="eyebrow">FINALIZAR COMPRA</div>
   <h1><?= View::e($plan['name']) ?></h1>
   <div class="checkout-price">R$ <?= View::e($price) ?></div>
-  <p><?= $plan['code'] === 'monthly'
-      ? 'A licença mensal vale por 30 dias.'
-      : 'Pagamento único para a geração principal adquirida.' ?></p>
+  <p><?php
+      $planDescription = trim((string) ($plan['description'] ?? ''));
+      if ($planDescription !== '') {
+          echo View::e($planDescription);
+      } elseif (($plan['type'] ?? '') === 'lifetime') {
+          echo 'Pagamento único para a geração principal adquirida.';
+      } elseif (($plan['billing_interval'] ?? '') === 'year') {
+          echo 'Licença por assinatura anual.';
+      } else {
+          echo 'Licença por assinatura mensal.';
+      }
+  ?></p>
 
   <div class="checkout-summary">
     <div><span>Conta</span><b><?= View::e($user['email']) ?></b></div>

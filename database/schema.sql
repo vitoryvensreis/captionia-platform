@@ -19,27 +19,22 @@ CREATE TABLE IF NOT EXISTS plans (
     id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     code VARCHAR(50) NOT NULL UNIQUE,
     name VARCHAR(100) NOT NULL,
+    description VARCHAR(255) NULL,
     type ENUM('subscription','lifetime') NOT NULL,
     price_cents INT UNSIGNED NOT NULL,
     billing_interval ENUM('month','year','once') NOT NULL,
     max_devices TINYINT UNSIGNED NOT NULL DEFAULT 2,
     includes_updates TINYINT(1) NOT NULL DEFAULT 0,
+    featured TINYINT(1) NOT NULL DEFAULT 0,
+    sort_order SMALLINT NOT NULL DEFAULT 0,
     active TINYINT(1) NOT NULL DEFAULT 1,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-INSERT INTO plans (code,name,type,price_cents,billing_interval,max_devices,includes_updates,active)
+INSERT IGNORE INTO plans (code,name,type,price_cents,billing_interval,max_devices,includes_updates,active)
 VALUES
 ('monthly','Caption IA Mensal','subscription',3000,'month',2,1,1),
-('lifetime','Caption IA Vitalício','lifetime',7000,'once',2,0,1)
-ON DUPLICATE KEY UPDATE
-name=VALUES(name),
-type=VALUES(type),
-price_cents=VALUES(price_cents),
-billing_interval=VALUES(billing_interval),
-max_devices=VALUES(max_devices),
-includes_updates=VALUES(includes_updates),
-active=VALUES(active);
+('lifetime','Caption IA Vitalício','lifetime',7000,'once',2,0,1);
 
 CREATE TABLE IF NOT EXISTS licenses (
     id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,

@@ -43,6 +43,9 @@ $requiredColumns = [
     ['checkout_orders', 'provider_mode'],
     ['checkout_orders', 'pagbank_checkout_id'],
     ['checkout_orders', 'hosted_checkout_url'],
+    ['plans', 'description'],
+    ['plans', 'featured'],
+    ['plans', 'sort_order'],
 ];
 
 foreach ($requiredColumns as [$table, $column]) {
@@ -66,12 +69,18 @@ if (!in_array($paymentGateway, ['pagbank', 'bacen_pix'], true)) {
     exit(1);
 }
 
+$planCount = (int) $pdo->query('SELECT COUNT(*) FROM plans')->fetchColumn();
+if ($planCount < 1) {
+    fwrite(STDERR, "Nenhum plano cadastrado." . PHP_EOL);
+    exit(1);
+}
+
 $stats = [
     'users' => (int) $pdo->query('SELECT COUNT(*) FROM users')->fetchColumn(),
     'admins' => (int) $pdo->query("SELECT COUNT(*) FROM users WHERE role='admin' AND status='active'")->fetchColumn(),
     'licenses' => (int) $pdo->query("SELECT COUNT(*) FROM licenses WHERE status='active' AND (expires_at IS NULL OR expires_at>NOW())")->fetchColumn(),
-    'monthly' => (int) $pdo->query("SELECT COUNT(*) FROM licenses l JOIN plans p ON p.id=l.plan_id WHERE l.status='active' AND p.code='monthly' AND l.expires_at>NOW()")->fetchColumn(),
-    'lifetime' => (int) $pdo->query("SELECT COUNT(*) FROM licenses l JOIN plans p ON p.id=l.plan_id WHERE l.status='active' AND p.code='lifetime'")->fetchColumn(),
+    'subscriptions' => (int) $pdo->query("SELECT COUNT(*) FROM licenses l JOIN plans p ON p.id=l.plan_id WHERE l.status='active' AND p.type='subscription' AND l.expires_at>NOW()")->fetchColumn(),
+    'lifetime' => (int) $pdo->query("SELECT COUNT(*) FROM licenses l JOIN plans p ON p.id=l.plan_id WHERE l.status='active' AND p.type='lifetime'")->fetchColumn(),
     'paid_cents' => (int) $pdo->query("SELECT COALESCE(SUM(amount_cents),0) FROM payment_transactions WHERE status='paid'")->fetchColumn(),
 ];
 

@@ -52,6 +52,16 @@ try {
     if (!columnExists($pdo, 'users', 'role')) {
         $pdo->exec("ALTER TABLE users ADD COLUMN role ENUM('customer','admin') NOT NULL DEFAULT 'customer' AFTER password_hash");
     }
+    if (!columnExists($pdo, 'plans', 'description')) {
+        $pdo->exec("ALTER TABLE plans ADD COLUMN description VARCHAR(255) NULL AFTER name");
+    }
+    if (!columnExists($pdo, 'plans', 'featured')) {
+        $pdo->exec("ALTER TABLE plans ADD COLUMN featured TINYINT(1) NOT NULL DEFAULT 0 AFTER includes_updates");
+    }
+    if (!columnExists($pdo, 'plans', 'sort_order')) {
+        $pdo->exec("ALTER TABLE plans ADD COLUMN sort_order SMALLINT NOT NULL DEFAULT 0 AFTER featured");
+    }
+
     if (!columnExists($pdo, 'refresh_tokens', 'device_uuid')) {
         $pdo->exec("ALTER TABLE refresh_tokens ADD COLUMN device_uuid VARCHAR(128) NULL AFTER user_id");
         $pdo->exec("UPDATE refresh_tokens SET device_uuid=CONCAT('legacy-',id) WHERE device_uuid IS NULL OR device_uuid=''");

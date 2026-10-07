@@ -29,21 +29,21 @@ use CaptionIA\Core\View;
 </header>
 
 <aside class="suite-rail" aria-label="Navegação principal">
-  <a class="rail-item" href="/"><span>⌂</span><b>Home</b></a>
-  <a class="rail-item" href="/#recursos"><span>⌘</span><b>Recursos</b></a>
-  <a class="rail-item" href="/#planos"><span>◆</span><b>Planos</b></a>
+  <a class="rail-item" href="/"><i class="bi bi-house"></i><b>Home</b></a>
+  <a class="rail-item" href="/#recursos"><i class="bi bi-grid"></i><b>Recursos</b></a>
+  <a class="rail-item" href="/#planos"><i class="bi bi-credit-card"></i><b>Planos</b></a>
 
   <?php if (!empty($currentUser)): ?>
-    <a class="rail-item" href="/minha-conta"><span>◉</span><b>Conta</b></a>
+    <a class="rail-item" href="/minha-conta"><i class="bi bi-person-circle"></i><b>Conta</b></a>
     <?php if (($currentUser['role'] ?? '') === 'admin'): ?>
-      <a class="rail-item" href="/admin"><span>⚙</span><b>Admin</b></a>
+      <a class="rail-item" href="/admin"><i class="bi bi-gear"></i><b>Admin</b></a>
     <?php endif; ?>
     <form method="post" action="/sair" class="rail-form">
       <input type="hidden" name="_csrf" value="<?= View::e($csrf ?? '') ?>">
-      <button class="rail-item rail-button" type="submit"><span>↪</span><b>Sair</b></button>
+      <button class="rail-item rail-button" type="submit"><i class="bi bi-box-arrow-right"></i><b>Sair</b></button>
     </form>
   <?php else: ?>
-    <a class="rail-item" href="/criar-conta"><span>＋</span><b>Conta</b></a>
+    <a class="rail-item" href="/criar-conta"><i class="bi bi-person-plus"></i><b>Conta</b></a>
   <?php endif; ?>
 </aside>
 
@@ -59,6 +59,6 @@ use CaptionIA\Core\View;
   </footer>
 </div>
 
-<script src="/assets/app.js?v=2" defer></script>
+<script src="/assets/app.js?v=3" defer></script>
 </body>
 </html>

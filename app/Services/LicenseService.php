@@ -34,7 +34,8 @@ final class LicenseService
 
         try {
             $lock = $pdo->prepare(
-                'SELECT co.*,p.type AS plan_type,p.code AS plan_code,p.name AS plan_name
+                'SELECT co.*,p.type AS plan_type,p.code AS plan_code,p.name AS plan_name,
+                        p.billing_interval,p.includes_updates
                  FROM checkout_orders co
                  JOIN plans p ON p.id=co.plan_id
                  WHERE co.id=? FOR UPDATE'
@@ -88,18 +89,46 @@ final class LicenseService
                 if ($license && !empty($license['expires_at'])) {
                     $baseTs = max($baseTs, strtotime((string) $license['expires_at']) ?: 0);
                 }
-                $newExpiry = date('Y-m-d H:i:s', $baseTs + (30 * 86400));
+                $newExpiry = date('Y-m-d H:i:s', $baseTs + $this->subscriptionDurationSeconds((string) $fresh['billing_interval']));
 
                 if ($license) {
+                    $version = Env::get('CAPTIONIA_CURRENT_VERSION', '3.2.3') ?: '3.2.3';
+                    $major = max(1, Env::int('CAPTIONIA_CURRENT_MAJOR', 3));
                     $pdo->prepare(
-                        'UPDATE licenses SET expires_at=?,status=\'active\',updated_at=NOW() WHERE id=?'
-                    )->execute([$newExpiry, $license['id']]);
+                        'UPDATE licenses
+                         SET expires_at=?,status=\'active\',
+                             purchased_version=CASE
+                                 WHEN ?=0 AND purchased_version IS NULL THEN ?
+                                 ELSE purchased_version
+                             END,
+                             max_major_version=CASE
+                                 WHEN ?=0 AND max_major_version IS NULL THEN ?
+                                 ELSE max_major_version
+                             END,
+                             updated_at=NOW()
+                         WHERE id=?'
+                    )->execute([
+                        $newExpiry,
+                        (int) ($fresh['includes_updates'] ?? 0),
+                        $version,
+                        (int) ($fresh['includes_updates'] ?? 0),
+                        $major,
+                        $license['id'],
+                    ]);
                 } else {
+                    $version = Env::get('CAPTIONIA_CURRENT_VERSION', '3.2.3') ?: '3.2.3';
+                    $major = max(1, Env::int('CAPTIONIA_CURRENT_MAJOR', 3));
                     $pdo->prepare(
                         'INSERT INTO licenses
                          (user_id,plan_id,status,purchased_version,max_major_version,expires_at,created_at,updated_at)
-                         VALUES (?,?,\'active\',NULL,NULL,?,NOW(),NOW())'
-                    )->execute([$userId, $planId, $newExpiry]);
+                         VALUES (?,?,\'active\',?,?,?,NOW(),NOW())'
+                    )->execute([
+                        $userId,
+                        $planId,
+                        (int) ($fresh['includes_updates'] ?? 0) === 1 ? null : $version,
+                        (int) ($fresh['includes_updates'] ?? 0) === 1 ? null : $major,
+                        $newExpiry,
+                    ]);
                 }
 
                 $providerId = 'PIX-' . $userId . '-' . $planId;
@@ -216,13 +245,30 @@ final class LicenseService
                  VALUES (?,?,\'active\',?,?,NULL,NOW(),NOW())'
             )->execute([$userId, $row['id'], $version, $major]);
         } else {
-            $expiry = date('Y-m-d H:i:s', time() + (30 * 86400));
+            $expiry = date('Y-m-d H:i:s', time() + $this->subscriptionDurationSeconds((string) $row['billing_interval']));
+            $version = Env::get('CAPTIONIA_CURRENT_VERSION', '3.2.3') ?: '3.2.3';
+            $major = max(1, Env::int('CAPTIONIA_CURRENT_MAJOR', 3));
             $pdo->prepare(
                 'INSERT INTO licenses
-                 (user_id,plan_id,status,expires_at,created_at,updated_at)
-                 VALUES (?,?,\'active\',?,NOW(),NOW())'
-            )->execute([$userId, $row['id'], $expiry]);
+                 (user_id,plan_id,status,purchased_version,max_major_version,expires_at,created_at,updated_at)
+                 VALUES (?,?,\'active\',?,?,?,NOW(),NOW())'
+            )->execute([
+                $userId,
+                $row['id'],
+                (int) ($row['includes_updates'] ?? 0) === 1 ? null : $version,
+                (int) ($row['includes_updates'] ?? 0) === 1 ? null : $major,
+                $expiry,
+            ]);
         }
+    }
+
+    private function subscriptionDurationSeconds(string $billingInterval): int
+    {
+        return match ($billingInterval) {
+            'year' => 365 * 86400,
+            'month' => 30 * 86400,
+            default => throw new RuntimeException('Intervalo de cobrança inválido para licença por assinatura.'),
+        };
     }
 
     public function setStatus(int $licenseId, string $status): void
