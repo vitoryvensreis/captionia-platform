@@ -6,14 +6,11 @@ require $base . '/vendor/autoload.php';
 
 use CaptionIA\Core\Database;
 use CaptionIA\Core\Env;
-use PDO;
-use RuntimeException;
-use Throwable;
 
 Env::load($base);
 $pdo = Database::connection();
 
-function runSqlFile(\\PDO $pdo, string $file): void
+function runSqlFile(\PDO $pdo, string $file): void
 {
     if (!is_file($file)) {
         return;
@@ -21,7 +18,7 @@ function runSqlFile(\\PDO $pdo, string $file): void
 
     $sql = file_get_contents($file);
     if ($sql === false) {
-        throw new \\RuntimeException('Não foi possível ler ' . $file);
+        throw new \RuntimeException('Não foi possível ler ' . $file);
     }
 
     $statements = preg_split('/;\s*(?:\r?\n|$)/', $sql) ?: [];
@@ -33,7 +30,7 @@ function runSqlFile(\\PDO $pdo, string $file): void
     }
 }
 
-function columnExists(\\PDO $pdo, string $table, string $column): bool
+function columnExists(\PDO $pdo, string $table, string $column): bool
 {
     $stmt = $pdo->prepare(
         'SELECT COUNT(*) FROM information_schema.COLUMNS
@@ -62,7 +59,7 @@ try {
     }
 
     echo "Banco Caption IA atualizado com sucesso.\n";
-} catch (\\Throwable $e) {
+} catch (\Throwable $e) {
     fwrite(STDERR, "Falha ao atualizar o banco: " . $e->getMessage() . "\n");
     exit(1);
 }
