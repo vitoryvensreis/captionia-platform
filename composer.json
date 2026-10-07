@@ -1,11 +1,14 @@
 {
   "name": "escotilha/captionia-platform",
-  "description": "Site, licenças, assinaturas e API do Caption IA",
+  "description": "Site, vendas via PIX, licenças e API do Caption IA",
   "type": "project",
   "require": {
     "php": ">=8.2",
-    "ext-pdo": "*",
-    "ext-json": "*"
+    "ext-curl": "*",
+    "ext-json": "*",
+    "ext-mbstring": "*",
+    "ext-openssl": "*",
+    "ext-pdo": "*"
   },
   "autoload": {
     "psr-4": {

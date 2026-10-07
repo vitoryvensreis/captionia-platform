@@ -1,30 +1,145 @@
 # Caption IA Platform
 
-Site comercial, API de autenticação/licenças e painel administrativo do Caption IA.
+Plataforma web do Caption IA: página de venda, conta do cliente, pagamentos PIX pelo PagBank, licenças, dispositivos, painel administrativo e API para o plugin Premiere.
 
-## Planos iniciais
+## Planos
 
-- Mensal: R$ 30,00/mês, 2 dispositivos, atualizações incluídas.
-- Vitalício: R$ 70,00, 2 dispositivos, sem futuras versões principais.
+- **Mensal — R$ 30,00:** libera 30 dias. Como o checkout é exclusivamente PIX, a renovação é feita por um novo PIX; pagamentos aprovados acrescentam 30 dias.
+- **Vitalício — R$ 70,00:** licença permanente para a geração principal adquirida, sem futuras gerações principais.
+- Ambos permitem **2 dispositivos**.
+
+## URLs amigáveis
+
+- `/`
+- `/entrar`
+- `/criar-conta`
+- `/comprar/mensal`
+- `/comprar/vitalicio`
+- `/pagamento/{referencia}`
+- `/minha-conta`
+- `/admin`
+- `/webhooks/pagbank`
+- `/api/v1/auth/login`
+- `/api/v1/auth/refresh`
+- `/api/v1/license/check`
+
+O VHost deve apontar o document root para `public/` e usar front controller para `index.php`.
 
 ## Requisitos
 
-- PHP 8.2+
+- PHP 8.2+ (testado para PHP 8.4)
 - Composer
 - MySQL 8+
-- Nginx/CloudPanel
+- extensões: curl, json, mbstring, openssl, pdo_mysql
 
-## Produção
-
-Document root:
-
-`/home/escotilhaprodutora-caption/htdocs/caption.escotilhaprodutora.com/public`
-
-Instalação:
+## Instalação no CloudPanel
 
 ```bash
+cd /home/escotilhaprodutora-caption/htdocs/caption.escotilhaprodutora.com
+
+git fetch origin main
+git reset --hard origin/main
+
 composer install --no-dev --optimize-autoloader
+
 cp .env.example .env
+nano .env
 ```
 
-Depois configure o banco no `.env`.
+Gere uma APP_KEY:
+
+```bash
+php -r "echo bin2hex(random_bytes(32)), PHP_EOL;"
+```
+
+Cole o valor em `APP_KEY`.
+
+Depois aplique o banco:
+
+```bash
+php scripts/install.php
+```
+
+### Administrador
+
+Defina seu e-mail em `ADMIN_EMAIL` antes de criar sua conta. Alternativamente, depois de criar a conta:
+
+```bash
+php scripts/make-admin.php seu@email.com
+```
+
+## PagBank / PagSeguro — somente PIX
+
+No `.env`:
+
+```dotenv
+PAGBANK_ENV=sandbox
+PAGBANK_TOKEN=SEU_TOKEN
+PAGBANK_WEBHOOK_VERIFY=true
+```
+
+Em produção troque `PAGBANK_ENV=production`.
+
+O sistema envia `notification_urls` apontando para:
+
+`https://caption.escotilhaprodutora.com/webhooks/pagbank`
+
+Crie uma chave pública de validação de webhook uma vez por ambiente:
+
+```bash
+php scripts/pagbank-create-webhook-key.php
+```
+
+A licença só é liberada quando um pagamento PIX com valor correto chega como `PAID` por sincronização com o PagBank. O webhook é validado pela assinatura `x-payload-signature` usando ECDSA/SHA-256.
+
+## Banco
+
+O projeto **não armazena senha de banco no Git**. Preencha `DB_PASSWORD` apenas no arquivo `.env` do servidor.
+
+O instalador usa os arquivos:
+
+- `database/schema.sql`
+- `database/migrations/20261007_upgrade.sql`
+
+## API do plugin
+
+### Login
+
+`POST /api/v1/auth/login`
+
+JSON:
+
+```json
+{
+  "email": "cliente@email.com",
+  "password": "senha",
+  "device_uuid": "uuid-persistente-do-dispositivo",
+  "device_name": "PC Editor",
+  "os": "Windows 11"
+}
+```
+
+O retorno contém access token curto e refresh token longo. O plugin deve guardar o refresh token com DPAPI no Windows e Keychain no macOS.
+
+### Renovar sessão
+
+`POST /api/v1/auth/refresh`
+
+### Verificar licença
+
+`GET /api/v1/license/check?version=3.2.3`
+
+Header: `Authorization: Bearer ACCESS_TOKEN`
+
+O vitalício é limitado pela geração principal comprada; o mensal ativo aceita a versão atual.
+
+## Segurança
+
+- senha com Argon2id quando disponível;
+- prepared statements PDO;
+- CSRF no site;
+- cookies HttpOnly/Secure/SameSite;
+- token PagBank e senhas apenas no `.env`;
+- webhook PagBank autenticado;
+- processamento de pagamento idempotente;
+- limite de dispositivos aplicado pela API.

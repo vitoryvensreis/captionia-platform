@@ -1,0 +1,1 @@
+<main class="auth-wrap"><section class="auth-card"><div class="eyebrow">404</div><h1>Página não encontrada.</h1><p>O endereço que você tentou acessar não existe.</p><a class="button" href="/">Voltar ao início</a></section></main>
