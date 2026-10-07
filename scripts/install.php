@@ -58,6 +58,17 @@ try {
         $pdo->exec("ALTER TABLE refresh_tokens MODIFY COLUMN device_uuid VARCHAR(128) NOT NULL");
     }
 
+    if (!columnExists($pdo, 'checkout_orders', 'provider_mode')) {
+        $pdo->exec("ALTER TABLE checkout_orders ADD COLUMN provider_mode VARCHAR(32) NOT NULL DEFAULT 'transparent_pix' AFTER amount_cents");
+    }
+    if (!columnExists($pdo, 'checkout_orders', 'pagbank_checkout_id')) {
+        $pdo->exec("ALTER TABLE checkout_orders ADD COLUMN pagbank_checkout_id VARCHAR(190) NULL AFTER pagbank_order_id");
+        $pdo->exec("CREATE UNIQUE INDEX uq_checkout_pagbank_checkout_id ON checkout_orders (pagbank_checkout_id)");
+    }
+    if (!columnExists($pdo, 'checkout_orders', 'hosted_checkout_url')) {
+        $pdo->exec("ALTER TABLE checkout_orders ADD COLUMN hosted_checkout_url TEXT NULL AFTER pagbank_charge_id");
+    }
+
     echo "Banco Caption IA atualizado com sucesso.\n";
 } catch (\Throwable $e) {
     fwrite(STDERR, "Falha ao atualizar o banco: " . $e->getMessage() . "\n");

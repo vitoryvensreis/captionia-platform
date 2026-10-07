@@ -91,6 +91,9 @@ jobs:
           echo "== Banco =="
           php scripts/install.php
 
+          echo "== Painel Admin =="
+          php scripts/admin-selftest.php
+
           chmod 600 .env
           mkdir -p storage/logs storage/cache
           chmod 770 storage/logs storage/cache
@@ -121,4 +124,6 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          curl --fail --silent --show-error             https://caption.escotilhaprodutora.com/health
+          curl --fail --silent --show-error https://caption.escotilhaprodutora.com/health
+          ADMIN_CODE="$(curl --silent --output /dev/null --write-out '%{http_code}' https://caption.escotilhaprodutora.com/admin)"
+          test "$ADMIN_CODE" = "302"

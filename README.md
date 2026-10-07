@@ -1,6 +1,6 @@
 # Caption IA Platform
 
-Plataforma web do Caption IA: página de venda, conta do cliente, pagamentos PIX pelo PagBank, licenças, dispositivos, painel administrativo e API para o plugin Premiere.
+Plataforma web do Caption IA: página de venda, conta do cliente, Checkout PagBank hospedado com PIX, licenças, dispositivos, painel administrativo e API para o plugin Premiere.
 
 ## Planos
 
@@ -68,7 +68,7 @@ Defina seu e-mail em `ADMIN_EMAIL` antes de criar sua conta. Alternativamente, d
 php scripts/make-admin.php seu@email.com
 ```
 
-## PagBank / PagSeguro — somente PIX
+## PagBank / PagSeguro — Checkout hospedado
 
 No `.env`:
 
@@ -83,6 +83,8 @@ Em produção troque `PAGBANK_ENV=production`.
 O sistema envia `notification_urls` apontando para:
 
 `https://caption.escotilhaprodutora.com/webhooks/pagbank`
+
+Por padrão o sistema usa `PAGBANK_CHECKOUT_MODE=hosted`, cria um checkout em `/checkouts`, habilita `payment_methods=[PIX]` e redireciona o cliente para o link `PAY` devolvido pelo PagBank. O modo transparente antigo continua disponível apenas como fallback técnico usando `PAGBANK_CHECKOUT_MODE=transparent`.
 
 Crie uma chave pública de validação de webhook uma vez por ambiente:
 
@@ -143,3 +145,10 @@ O vitalício é limitado pela geração principal comprada; o mensal ativo aceit
 - webhook PagBank autenticado;
 - processamento de pagamento idempotente;
 - limite de dispositivos aplicado pela API.
+
+
+## Validação do painel Admin
+
+O deploy executa `php scripts/admin-selftest.php` após as migrations. O script valida tabelas/colunas e executa as mesmas consultas principais usadas pelo dashboard, sem alterar dados.
+
+O endpoint `/admin` exige usuário autenticado com `role=admin`. Sem sessão, deve redirecionar para `/entrar`.

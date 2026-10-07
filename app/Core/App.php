@@ -48,6 +48,7 @@ final class App
                     'app' => 'Caption IA Platform',
                     'time' => date(DATE_ATOM),
                     'pagbank_configured' => $this->pagBank->configured(),
+                    'pagbank_checkout_mode' => $this->pagBank->checkoutMode(),
                 ]);
             }
 
@@ -91,8 +92,8 @@ final class App
                 $this->checkoutPage($m[1]);
                 return;
             }
-            if ($method === 'POST' && preg_match('#^/comprar/(mensal|vitalicio)/pix$#', $path, $m)) {
-                $this->createPix($m[1]);
+            if ($method === 'POST' && preg_match('#^/comprar/(mensal|vitalicio)/(checkout|pix)$#', $path, $m)) {
+                $this->createCheckout($m[1]);
                 return;
             }
             if ($method === 'GET' && preg_match('#^/pagamento/([A-Z0-9-]+)$#', $path, $m)) {
@@ -238,7 +239,7 @@ final class App
         ]);
     }
 
-    private function createPix(string $slug): void
+    private function createCheckout(string $slug): void
     {
         Csrf::validate($_POST['_csrf'] ?? null);
         $user = $this->auth->requireUser();
@@ -247,7 +248,15 @@ final class App
             throw new RuntimeException('Plano não encontrado.');
         }
 
-        $order = $this->checkout->createPixForUser($user, $plan);
+        $order = $this->checkout->createForUser($user, $plan);
+
+        if (
+            ($order['provider_mode'] ?? '') === 'hosted_checkout'
+            && !empty($order['hosted_checkout_url'])
+        ) {
+            $this->redirectExternal((string) $order['hosted_checkout_url']);
+        }
+
         $this->redirect('/pagamento/' . rawurlencode($order['reference_id']));
     }
 
@@ -556,6 +565,32 @@ final class App
     private function redirect(string $url): never
     {
         header('Location: ' . $url, true, 302);
+        exit;
+    }
+
+    private function redirectExternal(string $url): never
+    {
+        if (!filter_var($url, FILTER_VALIDATE_URL)) {
+            throw new RuntimeException('Link de pagamento inválido.');
+        }
+
+        $parts = parse_url($url);
+        $host = strtolower((string) ($parts['host'] ?? ''));
+        $allowed = ($parts['scheme'] ?? '') === 'https'
+            && (
+                $host === 'pagbank.com.br'
+                || str_ends_with($host, '.pagbank.com.br')
+                || $host === 'pagseguro.com.br'
+                || str_ends_with($host, '.pagseguro.com.br')
+                || $host === 'pagseguro.uol.com.br'
+                || str_ends_with($host, '.pagseguro.uol.com.br')
+            );
+
+        if (!$allowed) {
+            throw new RuntimeException('O PagBank retornou um endereço de pagamento inesperado.');
+        }
+
+        header('Location: ' . $url, true, 303);
         exit;
     }
 

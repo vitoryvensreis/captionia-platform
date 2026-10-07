@@ -26,6 +26,78 @@ final class CheckoutService
         return $plan ?: null;
     }
 
+    public function createForUser(array $user, array $plan): array
+    {
+        return $this->pagBank->checkoutMode() === 'hosted'
+            ? $this->createHostedCheckoutForUser($user, $plan)
+            : $this->createPixForUser($user, $plan);
+    }
+
+    public function createHostedCheckoutForUser(array $user, array $plan): array
+    {
+        if (!$this->pagBank->configured()) {
+            throw new RuntimeException('O PagBank ainda não foi configurado no servidor.');
+        }
+
+        $reference = 'CIA-' . strtoupper(bin2hex(random_bytes(8)));
+        $pdo = Database::connection();
+        $minutes = max(10, min(1440, Env::int('PAGBANK_PIX_EXPIRATION_MINUTES', 30)));
+        $expiresAt = date('Y-m-d H:i:s', time() + ($minutes * 60));
+
+        $insert = $pdo->prepare(
+            'INSERT INTO checkout_orders
+             (reference_id,user_id,plan_id,status,amount_cents,provider_mode,expires_at,created_at,updated_at)
+             VALUES (?,?,?,\'creating\',?,\'hosted_checkout\',?,NOW(),NOW())'
+        );
+        $insert->execute([
+            $reference,
+            $user['id'],
+            $plan['id'],
+            $plan['price_cents'],
+            $expiresAt,
+        ]);
+        $checkoutId = (int) $pdo->lastInsertId();
+
+        try {
+            $appUrl = rtrim(Env::get('APP_URL', 'https://caption.escotilhaprodutora.com') ?: '', '/');
+            $notificationUrl = $appUrl . '/webhooks/pagbank';
+            $returnUrl = $appUrl . '/pagamento/' . rawurlencode($reference);
+
+            $response = $this->pagBank->createHostedCheckout(
+                $user,
+                $plan,
+                $reference,
+                $notificationUrl,
+                $returnUrl
+            );
+
+            $hostedUrl = $this->pagBank->hostedPayUrl($response);
+            if (!$hostedUrl) {
+                throw new RuntimeException('PagBank não retornou o link do checkout.');
+            }
+
+            $pdo->prepare(
+                'UPDATE checkout_orders
+                 SET pagbank_checkout_id=?,hosted_checkout_url=?,status=\'waiting\',
+                     raw_response_json=?,updated_at=NOW()
+                 WHERE id=?'
+            )->execute([
+                $response['id'] ?? null,
+                $hostedUrl,
+                json_encode($response, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+                $checkoutId,
+            ]);
+
+            return $this->findByReference($reference)
+                ?? throw new RuntimeException('Não foi possível carregar o checkout criado.');
+        } catch (\Throwable $e) {
+            $pdo->prepare(
+                'UPDATE checkout_orders SET status=\'failed\',updated_at=NOW() WHERE id=?'
+            )->execute([$checkoutId]);
+            throw $e;
+        }
+    }
+
     public function createPixForUser(array $user, array $plan): array
     {
         if (!$this->pagBank->configured()) {
@@ -39,8 +111,8 @@ final class CheckoutService
 
         $insert = $pdo->prepare(
             'INSERT INTO checkout_orders
-             (reference_id,user_id,plan_id,status,amount_cents,expires_at,created_at,updated_at)
-             VALUES (?,?,?,\'creating\',?,?,NOW(),NOW())'
+             (reference_id,user_id,plan_id,status,amount_cents,provider_mode,expires_at,created_at,updated_at)
+             VALUES (?,?,?,\'creating\',?,\'transparent_pix\',?,NOW(),NOW())'
         );
         $insert->execute([
             $reference,
@@ -126,12 +198,19 @@ final class CheckoutService
 
         if (
             in_array($order['status'], ['creating', 'waiting'], true)
-            && !empty($order['pagbank_order_id'])
             && $this->pagBank->configured()
         ) {
             try {
-                $payload = $this->pagBank->getOrder((string) $order['pagbank_order_id']);
-                $this->processPayload($payload, 'poll');
+                if (
+                    ($order['provider_mode'] ?? '') === 'hosted_checkout'
+                    && !empty($order['pagbank_checkout_id'])
+                ) {
+                    $payload = $this->pagBank->getCheckout((string) $order['pagbank_checkout_id']);
+                    $this->processPayload($payload, 'poll');
+                } elseif (!empty($order['pagbank_order_id'])) {
+                    $payload = $this->pagBank->getOrder((string) $order['pagbank_order_id']);
+                    $this->processPayload($payload, 'poll');
+                }
             } catch (\Throwable) {
             }
 
@@ -194,46 +273,67 @@ final class CheckoutService
 
     public function processPayload(array $payload, string $source): ?array
     {
-        $charge = $payload['charges'][0] ?? null;
+        $payment = $this->extractPayment($payload);
         $reference = (string) ($payload['reference_id'] ?? '');
 
-        if ($reference === '' && is_array($charge)) {
-            $reference = (string) ($charge['reference_id'] ?? '');
-        }
-        if ($reference === '') {
-            return null;
+        if ($reference === '' && $payment) {
+            $reference = (string) ($payment['reference_id'] ?? '');
         }
 
-        $order = $this->findByReference($reference);
+        $order = $reference !== '' ? $this->findByReference($reference) : null;
+
+        $payloadId = (string) ($payload['id'] ?? '');
+        if (!$order && str_starts_with($payloadId, 'CHEC_')) {
+            $stmt = Database::connection()->prepare(
+                'SELECT co.reference_id
+                 FROM checkout_orders co
+                 WHERE co.pagbank_checkout_id=?
+                 LIMIT 1'
+            );
+            $stmt->execute([$payloadId]);
+            $foundReference = (string) ($stmt->fetchColumn() ?: '');
+            if ($foundReference !== '') {
+                $order = $this->findByReference($foundReference);
+                $reference = $foundReference;
+            }
+        }
+
         if (!$order) {
             return null;
         }
 
-        $status = strtoupper((string) (is_array($charge) ? ($charge['status'] ?? '') : ''));
-        if ($status === '') {
-            return $order;
+        $checkoutStatus = strtoupper((string) ($payload['status'] ?? ''));
+        $local = $payment
+            ? $this->mapStatus((string) ($payment['status'] ?? ''))
+            : ($checkoutStatus === 'EXPIRED' ? 'expired' : $order['status']);
+
+        $amount = $payment ? (int) ($payment['amount']['value'] ?? 0) : 0;
+
+        if ($local === 'paid') {
+            if ($amount <= 0 || $amount !== (int) $order['amount_cents']) {
+                throw new RuntimeException('Valor do pagamento não corresponde ao pedido.');
+            }
         }
 
-        $local = $this->mapStatus($status);
-        $amount = is_array($charge) ? (int) ($charge['amount']['value'] ?? 0) : 0;
-
-        if ($local === 'paid' && $amount !== (int) $order['amount_cents']) {
-            throw new RuntimeException('Valor do pagamento não corresponde ao pedido.');
-        }
+        $pagbankOrderId = str_starts_with($payloadId, 'ORDE_') ? $payloadId : null;
+        $pagbankCheckoutId = str_starts_with($payloadId, 'CHEC_') ? $payloadId : null;
+        $paymentId = $payment ? (string) ($payment['id'] ?? '') : '';
 
         Database::connection()->prepare(
             'UPDATE checkout_orders
              SET status=?,
                  pagbank_order_id=COALESCE(?,pagbank_order_id),
-                 pagbank_charge_id=COALESCE(?,pagbank_charge_id),
+                 pagbank_checkout_id=COALESCE(?,pagbank_checkout_id),
+                 pagbank_charge_id=COALESCE(NULLIF(?,\'\'),pagbank_charge_id),
                  raw_webhook_json=CASE WHEN ?=\'webhook\' THEN ? ELSE raw_webhook_json END,
                  paid_at=CASE WHEN ?=\'paid\' THEN COALESCE(paid_at,NOW()) ELSE paid_at END,
                  updated_at=NOW()
              WHERE id=?'
         )->execute([
             $local,
-            $payload['id'] ?? null,
-            is_array($charge) ? ($charge['id'] ?? null) : null,
+            $pagbankOrderId,
+            $pagbankCheckoutId,
+            $paymentId,
             $source,
             json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
             $local,
@@ -242,7 +342,7 @@ final class CheckoutService
 
         $fresh = $this->findByReference($reference);
         if ($fresh && $local === 'paid') {
-            $this->recordPayment($fresh, $payload);
+            $this->recordPayment($fresh, $payload, $payment);
             $this->licenses->activatePaidOrder($fresh);
             $fresh = $this->findByReference($reference);
         }
@@ -274,12 +374,17 @@ final class CheckoutService
         return $this->pagBank->fetchBinary($url);
     }
 
-    private function recordPayment(array $order, array $payload): void
+    private function recordPayment(array $order, array $payload, ?array $payment = null): void
     {
-        $charge = $payload['charges'][0] ?? [];
-        $paymentId = (string) ($charge['id'] ?? $order['pagbank_charge_id'] ?? '');
+        $payment ??= $this->extractPayment($payload);
+        $paymentId = (string) (
+            ($payment['id'] ?? '')
+            ?: ($order['pagbank_charge_id'] ?? '')
+            ?: ($order['pagbank_order_id'] ?? '')
+        );
+
         if ($paymentId === '') {
-            return;
+            throw new RuntimeException('Pagamento confirmado sem identificador do PagBank.');
         }
 
         Database::connection()->prepare(
@@ -295,9 +400,53 @@ final class CheckoutService
         ]);
     }
 
+    private function extractPayment(array $payload): ?array
+    {
+        $known = ['PAID', 'WAITING', 'DECLINED', 'CANCELED', 'CANCELLED', 'IN_ANALYSIS', 'AUTHORIZED'];
+
+        $walk = function (mixed $node) use (&$walk, $known): ?array {
+            if (!is_array($node)) {
+                return null;
+            }
+
+            $status = strtoupper((string) ($node['status'] ?? ''));
+            if (
+                in_array($status, $known, true)
+                && (
+                    isset($node['amount'])
+                    || str_starts_with((string) ($node['id'] ?? ''), 'CHAR_')
+                )
+            ) {
+                return $node;
+            }
+
+            $paidCandidate = null;
+            foreach ($node as $value) {
+                if (!is_array($value)) {
+                    continue;
+                }
+
+                $candidate = $walk($value);
+                if (!$candidate) {
+                    continue;
+                }
+
+                if (strtoupper((string) ($candidate['status'] ?? '')) === 'PAID') {
+                    return $candidate;
+                }
+
+                $paidCandidate ??= $candidate;
+            }
+
+            return $paidCandidate;
+        };
+
+        return $walk($payload);
+    }
+
     private function mapStatus(string $status): string
     {
-        return match ($status) {
+        return match (strtoupper($status)) {
             'PAID' => 'paid',
             'DECLINED' => 'declined',
             'CANCELED', 'CANCELLED' => 'cancelled',

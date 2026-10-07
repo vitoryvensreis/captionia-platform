@@ -25,6 +25,94 @@ final class PagBankService
         return $this->token !== '';
     }
 
+    public function checkoutMode(): string
+    {
+        $mode = strtolower(trim(Env::get('PAGBANK_CHECKOUT_MODE', 'hosted') ?: 'hosted'));
+        return $mode === 'transparent' ? 'transparent' : 'hosted';
+    }
+
+    public function createHostedCheckout(
+        array $customer,
+        array $plan,
+        string $referenceId,
+        string $notificationUrl,
+        string $returnUrl
+    ): array {
+        $phone = preg_replace('/\D+/', '', (string) ($customer['phone'] ?? '')) ?? '';
+        if (strlen($phone) !== 11 || $phone[2] !== '9') {
+            throw new RuntimeException('Informe um celular brasileiro válido com DDD para continuar no PagBank.');
+        }
+
+        $expirationMinutes = max(10, min(1440, Env::int('PAGBANK_PIX_EXPIRATION_MINUTES', 30)));
+        $expiration = date('Y-m-d\TH:i:sP', time() + ($expirationMinutes * 60));
+
+        $payload = [
+            'reference_id' => $referenceId,
+            'expiration_date' => $expiration,
+            'customer' => [
+                'name' => (string) $customer['name'],
+                'email' => (string) $customer['email'],
+                'tax_id' => preg_replace('/\D+/', '', (string) $customer['cpf']),
+                'phone' => [
+                    'country' => '+55',
+                    'area' => substr($phone, 0, 2),
+                    'number' => substr($phone, 2),
+                ],
+            ],
+            'customer_modifiable' => false,
+            'items' => [[
+                'reference_id' => (string) $plan['code'],
+                'name' => (string) $plan['name'],
+                'description' => $plan['code'] === 'monthly'
+                    ? 'Licença Caption IA por 30 dias'
+                    : 'Licença vitalícia da geração adquirida do Caption IA',
+                'quantity' => 1,
+                'unit_amount' => (int) $plan['price_cents'],
+            ]],
+            'payment_methods' => [[
+                'type' => 'PIX',
+            ]],
+            'redirect_url' => $returnUrl,
+            'redirect_waiting_time' => 5,
+            'return_url' => $returnUrl,
+            'notification_urls' => [$notificationUrl],
+            'payment_notification_urls' => [$notificationUrl],
+        ];
+
+        $response = $this->request('POST', '/checkouts', $payload);
+
+        if (empty($response['id'])) {
+            throw new RuntimeException('PagBank não retornou o identificador do checkout.');
+        }
+        if ($this->hostedPayUrl($response) === null) {
+            throw new RuntimeException('PagBank não retornou o link de pagamento do checkout.');
+        }
+
+        return $response;
+    }
+
+    public function getCheckout(string $checkoutId): array
+    {
+        return $this->request('GET', '/checkouts/' . rawurlencode($checkoutId));
+    }
+
+    public function hostedPayUrl(array $checkout): ?string
+    {
+        foreach (($checkout['links'] ?? []) as $link) {
+            if (
+                strtoupper((string) ($link['rel'] ?? '')) === 'PAY'
+                && strtoupper((string) ($link['method'] ?? 'GET')) === 'GET'
+            ) {
+                $url = trim((string) ($link['href'] ?? ''));
+                if ($this->isAllowedHostedPaymentUrl($url)) {
+                    return $url;
+                }
+            }
+        }
+
+        return null;
+    }
+
     public function createPixOrder(array $customer, array $plan, string $referenceId, string $notificationUrl): array
     {
         $phone = preg_replace('/\D+/', '', (string) ($customer['phone'] ?? '')) ?? '';
@@ -127,6 +215,27 @@ final class PagBankService
         foreach ($signatures as $signature) {
             $decoded = base64_decode(trim($signature), true);
             if ($decoded !== false && openssl_verify($rawBody, $decoded, $publicKey, OPENSSL_ALGO_SHA256) === 1) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private function isAllowedHostedPaymentUrl(string $url): bool
+    {
+        if (!filter_var($url, FILTER_VALIDATE_URL)) {
+            return false;
+        }
+
+        $parts = parse_url($url);
+        if (($parts['scheme'] ?? '') !== 'https') {
+            return false;
+        }
+
+        $host = strtolower((string) ($parts['host'] ?? ''));
+        foreach (['pagbank.com.br', 'pagseguro.com.br', 'pagseguro.uol.com.br'] as $suffix) {
+            if ($host === $suffix || str_ends_with($host, '.' . $suffix)) {
                 return true;
             }
         }

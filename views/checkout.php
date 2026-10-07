@@ -14,18 +14,18 @@ $price = number_format(((int) $plan['price_cents']) / 100, 2, ',', '.');
   <div class="checkout-summary">
     <div><span>Conta</span><b><?= View::e($user['email']) ?></b></div>
     <div><span>Dispositivos</span><b>até <?= (int) $plan['max_devices'] ?></b></div>
-    <div><span>Forma de pagamento</span><b>PIX</b></div>
+    <div><span>Pagamento</span><b>Checkout PagBank · PIX</b></div>
   </div>
 
   <?php if (!$pagbankConfigured): ?>
-    <div class="warning">O PagBank ainda não está configurado no servidor. Defina o token no arquivo <code>.env</code> antes de aceitar pagamentos.</div>
+    <div class="warning">O PagBank ainda não está configurado no servidor.</div>
   <?php else: ?>
-    <form method="post" action="/comprar/<?= View::e($slug) ?>/pix">
+    <form method="post" action="/comprar/<?= View::e($slug) ?>/checkout">
       <input type="hidden" name="_csrf" value="<?= View::e($csrf) ?>">
-      <button class="button button-wide" type="submit">Gerar PIX de R$ <?= View::e($price) ?></button>
+      <button class="button button-wide" type="submit">Continuar no PagBank</button>
     </form>
   <?php endif; ?>
 
-  <p class="secure-note">A licença só é liberada depois da confirmação autenticada do PagBank.</p>
+  <p class="secure-note">Você será redirecionado ao ambiente seguro do PagBank. O checkout foi configurado para PIX e a licença só é liberada após a confirmação do pagamento.</p>
 </section>
 </main>
