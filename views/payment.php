@@ -5,6 +5,16 @@ $isPaid = $status === 'paid';
 $isFinal = in_array($status, ['paid','declined','cancelled','expired','failed'], true);
 $isHosted = ($order['provider_mode'] ?? '') === 'hosted_checkout';
 $isBacen = ($order['provider_mode'] ?? '') === 'bacen_static_pix';
+
+$whatsappUrl = null;
+if ($isBacen && !$isPaid) {
+    $amountFormatted = number_format(((int) $order['amount_cents']) / 100, 2, ',', '.');
+    $message = "Olá! Já realizei o Pix do Caption IA.\n"
+        . "Pedido: " . ($order['reference_id'] ?? '') . "\n"
+        . "Valor: R$ " . $amountFormatted . "\n"
+        . "E-mail: " . ($order['customer_email'] ?? '');
+    $whatsappUrl = 'https://wa.me/5585921627669?text=' . rawurlencode($message);
+}
 ?>
 <main class="checkout-wrap">
 <section class="checkout-card payment-card" data-payment-reference="<?= View::e($order['reference_id']) ?>" data-payment-final="<?= $isFinal ? '1' : '0' ?>">
@@ -36,6 +46,17 @@ $isBacen = ($order['provider_mode'] ?? '') === 'bacen_static_pix';
       <span class="spinner"></span>
       <div><b>Aguardando confirmação</b><small>Como este Pix é direto, a confirmação é feita no painel Admin após a conferência do recebimento.</small></div>
     </div>
+
+    <?php if ($whatsappUrl): ?>
+      <a
+        class="button button-wide"
+        href="<?= View::e($whatsappUrl) ?>"
+        target="_blank"
+        rel="noopener noreferrer"
+        style="margin-top:12px"
+      >Já paguei · avisar no WhatsApp</a>
+    <?php endif; ?>
+
     <script
       src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"
       integrity="sha512-CNgIRecGo7nphbeZ04Sc13ka07paqdeTu0WR1IM4kNcpmBAUSHSQX0FslNhTDadL4O5SAGapGt4FodqL8My0mA=="
