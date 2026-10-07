@@ -229,7 +229,6 @@ $secondaryPlan = $byCode['lifetime'] ?? ($plans[1] ?? null);
   <details><summary>Preciso entrar toda vez que abrir o Premiere?</summary><p>Não. O sistema foi preparado para manter a sessão e renovar o acesso sem pedir login a cada abertura, enquanto a sessão continuar válida.</p></details>
   <details><summary>Posso usar em mais de um computador?</summary><p>O limite depende do plano escolhido e é mostrado antes da compra.</p></details>
   <details><summary>O plano recebe atualizações?</summary><p>Depende da configuração do plano. Essa informação aparece no card de compra.</p></details>
-  <details><summary>Como funciona o pagamento?</summary><p>O sistema aceita Pix. O método exibido depende da configuração ativa no painel administrativo.</p></details>
   <details><summary>Quando minha licença fica disponível?</summary><p>No pagamento automático, após a confirmação do gateway. No Pix direto, após a confirmação do recebimento pelo administrador.</p></details>
 </section>
 
