@@ -102,6 +102,10 @@ final class App
                 $this->recordMetric();
                 return;
             }
+            if ($method === 'GET' && $path === '/privacidade') {
+                $this->render('privacy', ['title' => 'Privacidade — Caption IA']);
+                return;
+            }
             if ($method === 'GET' && $path === '/afiliados') {
                 $this->affiliatePage();
                 return;
