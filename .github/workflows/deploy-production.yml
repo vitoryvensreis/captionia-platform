@@ -132,3 +132,8 @@ jobs:
           curl --fail --silent --show-error https://caption.escotilhaprodutora.com/health
           ADMIN_CODE="$(curl --silent --output /dev/null --write-out '%{http_code}' https://caption.escotilhaprodutora.com/admin)"
           test "$ADMIN_CODE" = "302"
+          for page in /admin/financeiro /admin/afiliados /afiliados; do
+            CODE="$(curl --silent --output /dev/null --write-out '%{http_code}' "https://caption.escotilhaprodutora.com$page")"
+            test "$CODE" = "302"
+          done
+          curl --fail --silent --show-error https://caption.escotilhaprodutora.com/privacidade >/dev/null
