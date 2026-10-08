@@ -14,11 +14,23 @@ final class CloudTranscriptionService
 {
     private const MAX_BYTES = 24000000;
 
-    public function transcribe(array $file, string $language): array
+    public static function validGroqKey(string $key): bool
     {
-        $key = trim((string)Env::get('GROQ_API_KEY', ''));
-        if (!str_starts_with($key, 'gsk_') || strlen($key) < 25) {
-            throw new RuntimeException('Transcrição na nuvem não configurada.');
+        return strlen($key) >= 25 && strlen($key) <= 200
+            && preg_match('/^gsk_[A-Za-z0-9_-]+$/D', $key) === 1;
+    }
+
+    public function transcribe(array $file, string $language, string $personalKey = ''): array
+    {
+        $personalKey = trim($personalKey);
+        if ($personalKey !== '' && !self::validGroqKey($personalKey)) {
+            throw new InvalidArgumentException('A chave Groq pessoal é inválida. Confira em console.groq.com/keys.');
+        }
+        // Default comes only from .env; BYOK exists in this request memory
+        // and is never stored, logged or exposed in response JSON.
+        $key = $personalKey !== '' ? $personalKey : trim((string)Env::get('GROQ_API_KEY', ''));
+        if (!self::validGroqKey($key)) {
+            throw new RuntimeException('Chave Groq da nuvem não configurada. Use uma chave pessoal em Configurações.');
         }
         if (!extension_loaded('curl')) {
             throw new RuntimeException('cURL indisponível.');
@@ -76,7 +88,11 @@ final class CloudTranscriptionService
         }
         if ($ok === false || $code < 200 || $code >= 300) {
             // Never send upstream error bodies or credentials back to plugin clients.
-            if ($code === 429) throw new RuntimeException('Provedor ocupado. Aguarde um minuto.');
+            if ($code === 429) throw new RuntimeException('Limite de requisições da Groq atingido para esta chave. Aguarde e tente novamente.');
+            if ($code === 401 || $code === 403) throw new RuntimeException(
+                $personalKey !== '' ? 'Sua chave Groq não foi aceita pelo provedor. Revise sua chave pessoal.' :
+                                     'Groq da nuvem temporariamente indisponível. Você pode usar uma chave pessoal.'
+            );
             throw new RuntimeException('Serviço de transcrição indisponível. Tente novamente.');
         }
         $decoded = json_decode($body, true);
