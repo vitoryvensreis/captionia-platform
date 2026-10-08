@@ -803,6 +803,35 @@ final class App
 
         $context = $this->apiAccessContext();
 
+        // Cloud Core: never return proprietary algorithms or private prompts to clients.
+        if ($method === 'POST' && $path === '/api/v1/core/captions/plan') {
+            $input = Json::input();
+            $license = $context['license'];
+            $version = (string)($input['client_version'] ?? '');
+            $device = (string)($context['token']['device'] ?? '');
+            if (!$license || !preg_match('/^\\d+\\.\\d+\\.\\d+$/', $version)
+                || !$this->licenses->versionAllowed($license, $version)) {
+                Json::send(['ok' => false, 'error' => 'Licença sem permissão para esta versão.'], 403);
+                return;
+            }
+            $deviceStmt = Database::connection()->prepare(
+                'SELECT 1 FROM license_devices WHERE license_id=? AND device_uuid=? AND revoked_at IS NULL LIMIT 1'
+            );
+            $deviceStmt->execute([(int)$license['id'], $device]);
+            if (!$deviceStmt->fetchColumn()) {
+                Json::send(['ok' => false, 'error' => 'Dispositivo não autorizado.'], 403);
+                return;
+            }
+            try {
+                $result = (new \\CaptionIA\\Services\\CloudCaptionPlanner())->plan($input);
+                header('Cache-Control: no-store');
+                Json::send(['ok' => true] + $result);
+            } catch (\\InvalidArgumentException $e) {
+                Json::send(['ok' => false, 'error' => $e->getMessage()], 422);
+            }
+            return;
+        }
+
         if ($method === 'GET' && $path === '/api/v1/me') {
             Json::send([
                 'ok' => true,
