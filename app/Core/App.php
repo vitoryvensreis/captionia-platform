@@ -1063,7 +1063,7 @@ final class App
         if (!$deviceStmt->fetchColumn()) {
             Json::send(['ok'=>false,'error'=>'Dispositivo não autorizado.'], 403);
         }
-        $limit = max(1, min(120, Env::int('CAPTIONIA_CLOUD_MAX_REQUESTS_PER_MINUTE', 30)));
+        $limit = $feature === 'transcribe' ? 2 : max(1, min(120, Env::int('CAPTIONIA_CLOUD_MAX_REQUESTS_PER_MINUTE', 30)));
         if (!(new \CaptionIA\Services\CloudRequestLimiter())->allow((int)$context['user']['id'], $feature, $limit)) {
             header('Retry-After: 60');
             Json::send(['ok'=>false,'error'=>'Muitas requisições. Tente novamente em um minuto.'], 429);
