@@ -1,3 +1,5 @@
+> ATUALIZAÇÃO 2026-10-08: a versão candidata 3.4.1 usa Groq somente no backend para transcrição, com licença e dispositivo autorizados. O fluxo visual de homologação foi removido do cliente. Os assets e o executor JSXBIN continuam distribuídos localmente; o projeto NÃO é ainda um cloud-only integral. Requer validação Windows/Mac, auditoria comercial de mídia, rotacionar chave Groq vazada e assinatura/distribuição CEP antes de liberar publicamente.
+
 # Caption IA Cloud Core — staging e rollback
 
 ## Estado da migração
