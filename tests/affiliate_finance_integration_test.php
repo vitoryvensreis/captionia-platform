@@ -102,6 +102,7 @@ $assert(($summary['events']['scroll_50']['count']??0)>=1,'scroll depth metrics')
 $assert(($summary['orders']['orders']??0)>=3,'orders financial reporting');
 $assert(AffiliateService::commissionCents(10000,1500)===1500,'integer cents rate');
 $assert(AffiliateService::priceCents('50,75')===5075,'BRL parser');
+$assert(AffiliateService::priceCents('1.250,90')===125090,'BRL thousands parser');
 $assert(AffiliateService::rateToBps('12,5')===1250,'BPS parser');
 
 echo "Financial integration PASS: referral, paid-only commission, idempotency, encryption, payout reservation/rejection and consensual funnel\n";
