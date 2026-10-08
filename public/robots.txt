@@ -1,0 +1,14 @@
+User-agent: *
+Allow: /
+Disallow: /admin
+Disallow: /api/
+Disallow: /minha-conta
+Disallow: /pagamento/
+Disallow: /comprar/
+Disallow: /entrar
+Disallow: /criar-conta
+Disallow: /sair
+Disallow: /webhooks/
+Disallow: /health
+
+Sitemap: https://caption.escotilhaprodutora.com/sitemap.xml
