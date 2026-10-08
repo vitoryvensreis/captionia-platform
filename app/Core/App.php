@@ -814,7 +814,7 @@ final class App
                     'caption_plan' => $enabled,
                     'edit_plan' => $enabled,
                     'assets' => $enabled && Env::bool('CAPTIONIA_CLOUD_ASSETS_ENABLED', false),
-                    'cloud_transcription' => false,
+                    'cloud_transcription' => $enabled && Env::bool('CAPTIONIA_CLOUD_TRANSCRIPTION_ENABLED', false) && str_starts_with((string)Env::get('GROQ_API_KEY', ''), 'gsk_'),
                 ],
             ]);
         }
@@ -866,6 +866,32 @@ final class App
             header('Cache-Control: private, no-store');
             echo $payload['data'];
             exit;
+        }
+
+        if ($method === 'POST' && $path === '/api/v1/core/transcription') {
+            if (!Env::bool('CAPTIONIA_CLOUD_TRANSCRIPTION_ENABLED', false)) {
+                Json::send(['ok'=>false,'error'=>'Transcrição na nuvem indisponível.'], 503);
+            }
+            $this->assertCloudAccess($context, 'transcribe');
+            if (($_POST['consent'] ?? '') !== 'yes') {
+                Json::send(['ok'=>false,'error'=>'Consentimento para enviar áudio é obrigatório.'], 422);
+            }
+            if ((int)($_SERVER['CONTENT_LENGTH'] ?? 0) > 25000000) {
+                Json::send(['ok'=>false,'error'=>'Arquivo excede o limite do serviço.'], 413);
+            }
+            $daily = max(1,min(100,Env::int('CAPTIONIA_CLOUD_TRANSCRIPTION_DAILY_CALLS', 12)));
+            if (!(new \CaptionIA\Services\CloudRequestLimiter())->allowDaily(
+                (int)$context['user']['id'], 'groq', $daily)) {
+                header('Retry-After: 3600');
+                Json::send(['ok'=>false,'error'=>'Limite diário de transcrições atingido.'], 429);
+            }
+            try {
+                $result = (new \CaptionIA\Services\CloudTranscriptionService())
+                    ->transcribe($_FILES['file'] ?? [], trim((string)($_POST['language'] ?? '')));
+                Json::send(['ok'=>true] + $result);
+            } catch (\InvalidArgumentException $e) {
+                Json::send(['ok'=>false,'error'=>$e->getMessage()], 422);
+            }
         }
 
         if ($method === 'GET' && $path === '/api/v1/me') {
