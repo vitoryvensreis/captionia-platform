@@ -34,11 +34,26 @@ foreach ([
     ['text'=>''],
     ['text'=>'abc','aspect_ratio'=>'2:3'],
     ['words'=>[['text'=>'a','start'=>5,'end'=>4]]],
-    ['words'=>[['text'=>'a','start'=>1,'end'=>2],['text'=>'b','start'=>0,'end'=>1]]],
 ] as $invalid) {
     try { $p->plan($invalid); throw new RuntimeException('Entrada inválida aceita.'); }
     catch (InvalidArgumentException $expected) {}
 }
+// A resposta Groq pode não estar ordenada; não inventar nem alterar timings.
+$reordered = $p->plan(['words'=>[
+    ['text'=>'segundo','start'=>1.1,'end'=>1.6],
+    ['text'=>'primeiro','start'=>0.2,'end'=>0.8],
+    ['text'=>'terceiro','start'=>1.7,'end'=>2.0],
+], 'max_words'=>8, 'max_chars'=>40]);
+$assert(count($reordered['segments']) === 1, 'Ordenação inesperadamente segmentou os dados.');
+$assert($reordered['segments'][0]['text'] === 'primeiro segundo terceiro', 'Não ordenou os pares palavra/timecode.');
+$assert(abs($reordered['segments'][0]['start_time'] - .2) < .0001, 'Início foi alterado na ordenação.');
+$assert(abs($reordered['segments'][0]['end_time'] - 2.0) < .0001, 'Fim foi alterado na ordenação.');
+$overlap = $p->plan(['words'=>[
+    ['text'=>'fala','start'=>0,'end'=>1.8],
+    ['text'=>'rápida','start'=>1.0,'end'=>1.4]
+], 'max_words'=>8]);
+$assert(abs($overlap['segments'][0]['end_time'] - 1.8) < .0001, 'Sobreposição gerou término anterior ao texto.');
+
 echo "CloudCaptionPlanner: OK\n";
 
 require __DIR__ . '/cloud_asset_crypto_test.php';
