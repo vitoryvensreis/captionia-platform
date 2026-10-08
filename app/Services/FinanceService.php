@@ -4,9 +4,6 @@ declare(strict_types=1);
 namespace CaptionIA\Services;
 
 use CaptionIA\Core\Database;
-use CaptionIA\Core\Env;
-use CaptionIA\Core\Sessions;
-use PDO;
 use RuntimeException;
 
 /**
