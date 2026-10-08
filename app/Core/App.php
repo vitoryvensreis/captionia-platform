@@ -1140,7 +1140,9 @@ final class App
                     'caption_plan' => $enabled,
                     'edit_plan' => $enabled,
                     'assets' => $enabled && Env::bool('CAPTIONIA_CLOUD_ASSETS_ENABLED', false),
-                    'cloud_transcription' => $enabled && Env::bool('CAPTIONIA_CLOUD_TRANSCRIPTION_ENABLED', false) && str_starts_with((string)Env::get('GROQ_API_KEY', ''), 'gsk_'),
+                    'cloud_transcription' => $enabled && Env::bool('CAPTIONIA_CLOUD_TRANSCRIPTION_ENABLED', false),
+                    'cloud_transcription_default_key' => str_starts_with((string)Env::get('GROQ_API_KEY', ''), 'gsk_'),
+                    'cloud_transcription_personal_key' => true,
                 ],
             ]);
         }
@@ -1199,21 +1201,16 @@ final class App
                 Json::send(['ok'=>false,'error'=>'Transcrição na nuvem indisponível.'], 503);
             }
             $this->assertCloudAccess($context, 'transcribe');
-            if (($_POST['consent'] ?? '') !== 'yes') {
-                Json::send(['ok'=>false,'error'=>'Consentimento para enviar áudio é obrigatório.'], 422);
-            }
             if ((int)($_SERVER['CONTENT_LENGTH'] ?? 0) > 25000000) {
                 Json::send(['ok'=>false,'error'=>'Arquivo excede o limite do serviço.'], 413);
             }
-            $daily = max(1,min(100,Env::int('CAPTIONIA_CLOUD_TRANSCRIPTION_DAILY_CALLS', 12)));
-            if (!(new \CaptionIA\Services\CloudRequestLimiter())->allowDaily(
-                (int)$context['user']['id'], 'groq', $daily)) {
-                header('Retry-After: 3600');
-                Json::send(['ok'=>false,'error'=>'Limite diário de transcrições atingido.'], 429);
-            }
+            // No platform-imposed daily quota. Keep 2 requests/minute to prevent
+            // abuse and protect Groq/provider capacity and account spending.
+            // Personal Groq keys are request-scoped and NEVER persisted server-side.
             try {
+                $key = trim((string)($_POST['personal_groq_key'] ?? ''));
                 $result = (new \CaptionIA\Services\CloudTranscriptionService())
-                    ->transcribe($_FILES['file'] ?? [], trim((string)($_POST['language'] ?? '')));
+                    ->transcribe($_FILES['file'] ?? [], trim((string)($_POST['language'] ?? '')), $key);
                 Json::send(['ok'=>true] + $result);
             } catch (\InvalidArgumentException $e) {
                 Json::send(['ok'=>false,'error'=>$e->getMessage()], 422);
