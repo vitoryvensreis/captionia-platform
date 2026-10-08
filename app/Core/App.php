@@ -10,6 +10,7 @@ use CaptionIA\Services\AuthService;
 use CaptionIA\Services\CheckoutService;
 use CaptionIA\Services\LicenseService;
 use CaptionIA\Services\OrderAdjustmentService;
+use CaptionIA\Services\SaleManagementService;
 use CaptionIA\Services\PagBankService;
 use CaptionIA\Services\PixBacenService;
 use CaptionIA\Services\ReleaseService;
@@ -30,6 +31,7 @@ final class App
     private AffiliateService $affiliates;
     private FinanceService $finance;
     private OrderAdjustmentService $orderAdjustments;
+    private SaleManagementService $saleManagement;
 
     public function __construct(private readonly string $basePath)
     {
@@ -44,6 +46,7 @@ final class App
         $this->affiliates = new AffiliateService($this->settings);
         $this->finance = new FinanceService($this->settings);
         $this->orderAdjustments = new OrderAdjustmentService();
+        $this->saleManagement = new SaleManagementService();
         $this->pixBacen = new PixBacenService();
         $this->releases = new ReleaseService($basePath);
         $this->checkout = new CheckoutService(
@@ -224,6 +227,10 @@ final class App
             }
             if ($method === 'POST' && $path === '/admin/configuracoes/pagamentos') {
                 $this->adminSavePaymentSettings();
+                return;
+            }
+            if ($method === 'POST' && preg_match('#^/admin/pagamentos/([A-Z0-9-]+)/(ajustar-valor|restaurar-valor|arquivar|restaurar-venda)$#D', $path, $m)) {
+                $this->adminSaleManagementAction($m[1], $m[2]);
                 return;
             }
             if ($method === 'GET' && preg_match('#^/admin/pagamentos/([A-Z0-9-]+)/editar$#D', $path, $m)) {
@@ -509,14 +516,17 @@ final class App
 
         $orders = $pdo->query(
             'SELECT co.reference_id,co.status,co.license_applied,co.provider_mode,co.amount_cents,co.created_at,co.paid_at,
+                    ov.display_amount_cents,ov.archived_at,
                     u.name,u.email,p.name AS plan_name,ap.name AS adjusted_access_plan
              FROM checkout_orders co
+             LEFT JOIN order_admin_overrides ov ON ov.order_id=co.id
              JOIN users u ON u.id=co.user_id
              JOIN plans p ON p.id=co.plan_id
              LEFT JOIN license_access_adjustments adj ON adj.id=(
                  SELECT MAX(a.id) FROM license_access_adjustments a WHERE a.order_id=co.id
              )
              LEFT JOIN plans ap ON ap.id=adj.new_plan_id
+             WHERE ov.archived_at IS NULL
              ORDER BY co.created_at DESC LIMIT 50'
         )->fetchAll();
 
@@ -542,11 +552,41 @@ final class App
         $this->auth->requireAdmin();
         $orderEdit = $this->orderAdjustments->findForAdmin($reference);
         if (!$orderEdit) throw new RuntimeException('Compra não encontrada.');
+        $saleInfo = $this->saleManagement->details($reference);
 
         $this->render('admin/order-edit', [
             'title' => 'Ajustar acesso do cliente — Caption IA',
             'orderEdit' => $orderEdit,
+            'saleInfo' => $saleInfo,
         ]);
+    }
+
+    private function adminSaleManagementAction(string $reference,string $action): void
+    {
+        Csrf::validate($_POST['_csrf'] ?? null);
+        $admin=$this->auth->requireAdmin();
+        $reason=(string)($_POST['reason']??'');
+        switch($action){
+            case 'ajustar-valor':
+                $this->saleManagement->updateValue($reference,(string)($_POST['display_amount']??''),$reason,(int)$admin['id']);
+                $message='Valor gerencial atualizado. A cobrança efetiva permanece inalterada.';
+                break;
+            case 'restaurar-valor':
+                $this->saleManagement->resetValue($reference,$reason,(int)$admin['id']);
+                $message='Valor gerencial revertido ao valor original.';
+                break;
+            case 'arquivar':
+                $this->saleManagement->archive($reference,$reason,(int)$admin['id']);
+                $message='Venda arquivada na gestão. Registros financeiros e direitos do cliente preservados.';
+                break;
+            case 'restaurar-venda':
+                $this->saleManagement->restore($reference,$reason,(int)$admin['id']);
+                $message='Venda restaurada nas listagens gerenciais.';
+                break;
+            default:throw new RuntimeException('Ação inválida.');
+        }
+        Session::flash('success',$message);
+        $this->redirect('/admin/pagamentos/'.rawurlencode($reference).'/editar');
     }
 
     private function adminSaveOrderAccess(string $reference): void
