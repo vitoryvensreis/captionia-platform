@@ -23,9 +23,11 @@ $depth=[25,50,75,100];
 <a class="mini-button" href="/admin/financeiro?dias=90">90 dias</a>
 <a class="mini-button" href="/admin/financeiro?dias=365">1 ano</a></div>
 <a class="mini-button" href="/admin/financeiro/exportar">Exportar vendas (CSV)</a></div>
-<p class="muted">Indicadores de <?= (int)$report['days'] ?> dias. Visitas e rolagem incluem apenas visitantes que consentiram com métricas; receitas e pedidos vêm diretamente do banco financeiro.</p>
+<p class="muted">Indicadores de <?= (int)$report['days'] ?> dias. Receitas efetivamente recebidas incluem vendas arquivadas e nunca são reescritas. O total gerencial reflete correções e ignora vendas arquivadas. Visitas e rolagem incluem apenas visitantes que consentiram com métricas.</p>
 <div class="stats-grid finance-stats">
-<article><small>Receita confirmada</small><b><?= $money((int)$s['paid_revenue_cents']) ?></b></article>
+<article><small>Receita realmente recebida (sem ajustes)</small><b><?= $money((int)$s['paid_revenue_cents']) ?></b></article>
+<article><small>Vendas pagas visíveis · valor gerencial</small><b><?= $money((int)$report['managerial']['visible_paid_cents']) ?></b></article>
+<article><small>Vendas arquivadas (histórico preservado)</small><b><?= (int)$report['archived_sales'] ?></b></article>
 <article><small>Vendas pagas</small><b><?= $paid ?></b></article>
 <article><small>Pedidos criados</small><b><?= $orders ?></b></article>
 <article><small>Conversão pedido → venda</small><b><?= number_format($conversion,1,',','.') ?>%</b></article>
@@ -71,11 +73,13 @@ $depth=[25,50,75,100];
 <?php if(!$report['daily']): ?><tr><td colspan="3">Sem vendas no período.</td></tr><?php endif; ?>
 </tbody></table></div></section>
 <section class="panel"><h2>Últimos pedidos</h2><div class="table-wrap"><table class="responsive-table">
-<thead><tr><th>Cliente</th><th>Plano</th><th>Valor</th><th>Status</th><th>Criado</th><th>Pago</th></tr></thead><tbody>
+<thead><tr><th>Cliente</th><th>Plano</th><th>Valor gerencial</th><th>Valor recebido/original</th><th>Status</th><th>Criado</th><th>Pago</th><th>Ação</th></tr></thead><tbody>
 <?php foreach($report['latest'] as $o): ?><tr>
 <td><b><?= View::e($o['buyer_name']) ?></b><small><?= View::e($o['buyer_email']) ?></small></td>
-<td><?= View::e($o['plan_name']) ?></td><td><?= $money((int)$o['amount_cents']) ?></td>
+<td><?= View::e($o['plan_name']) ?></td><td><?= $money((int)($o['display_amount_cents'] ?? $o['amount_cents'])) ?><?= $o['display_amount_cents']!==null?' (ajustado)':'' ?></td>
+<td><?= $money((int)$o['amount_cents']) ?></td>
 <td><?= View::e($o['status']) ?></td><td><?= View::e(date('d/m/Y H:i',strtotime($o['created_at']))) ?></td>
-<td><?= $o['paid_at']?View::e(date('d/m/Y H:i',strtotime($o['paid_at']))):'—' ?></td></tr><?php endforeach; ?>
+<td><?= $o['paid_at']?View::e(date('d/m/Y H:i',strtotime($o['paid_at']))):'—' ?></td>
+<td><a class="mini-button" href="/admin/pagamentos/<?= View::e(rawurlencode($o['reference_id'])) ?>/editar">Editar</a></td></tr><?php endforeach; ?>
 </tbody></table></div></section>
 </main>

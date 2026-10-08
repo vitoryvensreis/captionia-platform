@@ -59,7 +59,7 @@ $structuredData = [
 <script type="application/ld+json"><?= json_encode($structuredData, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?></script>
 <?php endif; ?>
 <link rel="stylesheet" href="/assets/icons/bootstrap-icons.min.css?v=1">
-<link rel="stylesheet" href="/assets/app.css?v=6">
+<link rel="stylesheet" href="/assets/app.css?v=7">
 </head>
 <body>
 <header class="suite-topbar">

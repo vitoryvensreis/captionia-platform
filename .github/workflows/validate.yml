@@ -92,3 +92,5 @@ jobs:
         run: php tests/affiliate_finance_integration_test.php
       - name: Validate manual paid-order adjustments and immutable receipts
         run: php tests/admin_order_adjustments_test.php
+      - name: Verify sale archival and managerial amount corrections
+        run: php tests/admin_sale_management_test.php

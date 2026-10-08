@@ -91,11 +91,31 @@ final class FinanceService
         )->fetchAll();
         $latest=$pdo->query(
             'SELECT co.reference_id,co.status,co.amount_cents,co.created_at,co.paid_at,
-                p.name AS plan_name,u.name AS buyer_name,u.email AS buyer_email
+                ov.display_amount_cents, p.name AS plan_name,u.name AS buyer_name,u.email AS buyer_email
              FROM checkout_orders co JOIN users u ON u.id=co.user_id
              JOIN plans p ON p.id=co.plan_id
+             LEFT JOIN order_admin_overrides ov ON ov.order_id=co.id
+             WHERE ov.archived_at IS NULL
              ORDER BY co.id DESC LIMIT 100'
         )->fetchAll();
+        // The received total remains immutable, even if an admin archives a
+        // sale or corrects its managerial value. Never represent a corrected
+        // amount as money actually received by the gateway.
+        $managerial=$pdo->query(
+            "SELECT COUNT(*) AS visible_orders,
+                 COALESCE(SUM(CASE WHEN co.status='paid'
+                    THEN COALESCE(ov.display_amount_cents,co.amount_cents) ELSE 0 END),0) AS visible_paid_cents,
+                 COALESCE(SUM(CASE WHEN co.status='paid'
+                    AND ov.display_amount_cents IS NOT NULL
+                    THEN ov.display_amount_cents-co.amount_cents ELSE 0 END),0) AS correction_delta_cents
+             FROM checkout_orders co
+             LEFT JOIN order_admin_overrides ov ON ov.order_id=co.id
+             WHERE co.created_at>=DATE_SUB(NOW(),INTERVAL $days DAY) AND ov.archived_at IS NULL"
+        )->fetch();
+        $hidden=(int)$pdo->query(
+            "SELECT COUNT(*) FROM checkout_orders co JOIN order_admin_overrides ov
+               ON ov.order_id=co.id WHERE ov.archived_at IS NOT NULL"
+        )->fetchColumn();
         $commissions=$pdo->query(
             "SELECT
               COALESCE(SUM(CASE WHEN status='earned' THEN amount_cents ELSE 0 END),0) AS commissions_cents
@@ -109,6 +129,7 @@ final class FinanceService
         return [
             'days'=>$days,'orders'=>$sales,'visitors'=>$unique,'events'=>$byEvent,
             'daily'=>$daily,'plans'=>$plans,'latest'=>$latest,
+            'managerial'=>$managerial,'archived_sales'=>$hidden,
             'commissions'=>$commissions,'withdrawals'=>$withdrawals,
         ];
     }

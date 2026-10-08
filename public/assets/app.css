@@ -216,3 +216,14 @@ body{overflow-x:hidden}
 .order-editor .responsive-table td small{display:block;margin-top:4px;color:#929292;font-size:11px}
 @media(max-width:900px){.order-purchase-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:550px){.order-purchase-grid{grid-template-columns:1fr}.order-editor .dashboard-head{align-items:flex-start}}
+
+/* Audited sale controls */
+.order-financial-values{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin:16px 0}
+.order-financial-values>div{padding:16px;border-radius:12px;background:#101010;border:1px solid #333;display:flex;flex-direction:column;gap:5px}
+.order-financial-values strong{font-size:20px}
+.order-financial-values small{color:#aaa}
+.order-archive-panel{border-color:rgba(232,100,68,.4)}
+.order-danger{color:#ff8d78!important;border:1px solid rgba(232,100,68,.65)!important;background:#2d1715!important}
+.order-danger:hover{background:#4c1c18!important}
+.order-editor .settings-form+.settings-form{margin-top:14px}
+@media(max-width:540px){.order-financial-values{grid-template-columns:1fr}}

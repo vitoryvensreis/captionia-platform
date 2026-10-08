@@ -8,6 +8,7 @@ use CaptionIA\Core\Env;
 use CaptionIA\Core\View;
 use CaptionIA\Services\LicenseService;
 use CaptionIA\Services\OrderAdjustmentService;
+use CaptionIA\Services\SaleManagementService;
 
 Env::load(dirname(__DIR__));
 date_default_timezone_set('America/Fortaleza');
@@ -60,6 +61,7 @@ try {
         '_basePath'=>dirname(__DIR__),
         'title'=>'Ajustar acesso',
         'orderEdit'=>$data,
+        'saleInfo'=>(new SaleManagementService())->details($reference),
         'currentUser'=>['name'=>'Order Admin','role'=>'admin'],
         'csrf'=>'smoke-token',
         'flashSuccess'=>null,
