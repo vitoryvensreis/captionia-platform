@@ -3,6 +3,8 @@ declare(strict_types=1);
 
 namespace CaptionIA\Core;
 
+use CaptionIA\Services\AffiliateService;
+use CaptionIA\Services\FinanceService;
 use CaptionIA\Services\ApiTokenService;
 use CaptionIA\Services\AuthService;
 use CaptionIA\Services\CheckoutService;
@@ -24,6 +26,8 @@ final class App
     private SettingsService $settings;
     private PixBacenService $pixBacen;
     private ReleaseService $releases;
+    private AffiliateService $affiliates;
+    private FinanceService $finance;
 
     public function __construct(private readonly string $basePath)
     {
@@ -35,6 +39,8 @@ final class App
         $this->licenses = new LicenseService();
         $this->pagBank = new PagBankService($basePath);
         $this->settings = new SettingsService();
+        $this->affiliates = new AffiliateService($this->settings);
+        $this->finance = new FinanceService($this->settings);
         $this->pixBacen = new PixBacenService();
         $this->releases = new ReleaseService($basePath);
         $this->checkout = new CheckoutService(
@@ -83,6 +89,49 @@ final class App
 
             if (str_starts_with($path, '/api/')) {
                 $this->api($method, $path);
+                return;
+            }
+
+            if ($method === 'GET' && preg_match('#^/r/([A-F0-9]{16})$#D', $path, $m)) {
+                $this->affiliates->registerVisit($m[1]);
+                header('Cache-Control: no-store, private');
+                $this->redirect('/');
+                return;
+            }
+            if ($method === 'POST' && $path === '/metricas/evento') {
+                $this->recordMetric();
+                return;
+            }
+            if ($method === 'GET' && $path === '/afiliados') {
+                $this->affiliatePage();
+                return;
+            }
+            if ($method === 'POST' && $path === '/afiliados/saques') {
+                $this->requestAffiliatePayout();
+                return;
+            }
+            if ($method === 'GET' && $path === '/admin/financeiro') {
+                $this->financePage();
+                return;
+            }
+            if ($method === 'GET' && $path === '/admin/financeiro/exportar') {
+                $this->exportFinanceCsv();
+                return;
+            }
+            if ($method === 'GET' && $path === '/admin/afiliados') {
+                $this->adminAffiliatePage();
+                return;
+            }
+            if ($method === 'POST' && $path === '/admin/afiliados/configurar') {
+                $this->adminAffiliateSettings();
+                return;
+            }
+            if ($method === 'POST' && preg_match('#^/admin/afiliados/usuario/(\d+)/(ativar|desativar)$#D', $path, $m)) {
+                $this->adminAffiliateUser((int)$m[1], $m[2]);
+                return;
+            }
+            if ($method === 'POST' && preg_match('#^/admin/afiliados/saques/(\d+)/(pago|recusar)$#D', $path, $m)) {
+                $this->adminAffiliateWithdrawal((int)$m[1], $m[2]);
                 return;
             }
 
@@ -302,6 +351,10 @@ final class App
         }
 
         $order = $this->checkout->createForUser($user, $plan);
+        if ($this->affiliates->enabled()) {
+            $this->affiliates->attributeNewOrder($order, (int)$user['id'], $_COOKIE['captionia_ref'] ?? null);
+            $this->affiliates->creditPaidOrder($order);
+        }
 
         if (
             ($order['provider_mode'] ?? '') === 'hosted_checkout'
@@ -318,6 +371,7 @@ final class App
         $user = $this->auth->requireUser();
         $order = $this->checkout->sync($reference);
         $this->assertOwnOrder($order, $user);
+        if ($order && $order['status'] === 'paid') $this->affiliates->creditPaidOrder($order);
 
         $this->render('payment', [
             'title' => 'Pagamento PIX — Caption IA',
@@ -331,6 +385,7 @@ final class App
         $user = $this->auth->requireUser();
         $order = $this->checkout->sync($reference);
         $this->assertOwnOrder($order, $user);
+        if ($order && $order['status'] === 'paid') $this->affiliates->creditPaidOrder($order);
 
         Json::send([
             'ok' => true,
@@ -379,6 +434,7 @@ final class App
             'devices' => $devices,
             'orders' => $this->checkout->ordersForUser((int) $user['id']),
             'plans' => $this->plans(),
+            'affiliateVisible' => $this->affiliates->enabled() && $license !== null,
         ]);
     }
 
@@ -483,7 +539,8 @@ final class App
         Csrf::validate($_POST['_csrf'] ?? null);
         $admin = $this->auth->requireAdmin();
 
-        $this->checkout->confirmManualBacenPayment($reference, (int) $admin['id']);
+        $paidOrder = $this->checkout->confirmManualBacenPayment($reference, (int) $admin['id']);
+        $this->affiliates->creditPaidOrder($paidOrder);
         Session::flash('success', 'Pix confirmado e licença liberada.');
         $this->redirect('/admin');
     }
