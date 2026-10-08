@@ -232,7 +232,9 @@ final class AffiliateService
             "SELECT
               COALESCE(SUM(CASE WHEN status='earned' THEN amount_cents ELSE 0 END),0) AS total,
               COALESCE(SUM(CASE WHEN status='earned' AND available_at<=NOW() THEN amount_cents ELSE 0 END),0) AS matured
-             FROM affiliate_commissions WHERE affiliate_id=?"
+             FROM affiliate_commissions ac
+             JOIN checkout_orders co ON co.id=ac.order_id
+             WHERE ac.affiliate_id=? AND co.status='paid'"
         );
         $stmt->execute([$affiliateId]);
         $row = $stmt->fetch();
@@ -245,6 +247,7 @@ final class AffiliateService
         $total = (int)$row['total'];
         $matured = (int)$row['matured'];
         return [
+            'deficit_cents' => max(0, $reserved - $matured),
             'earned_cents' => $total,
             'holding_cents' => max(0, $total - $matured),
             'reserved_paid_cents' => $reserved,
