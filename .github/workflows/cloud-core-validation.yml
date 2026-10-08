@@ -19,4 +19,6 @@ jobs:
       - name: Syntax check PHP
         run: find app tests -name '*.php' -print0 | xargs -0 -n 1 php -l
       - name: Caption planner regression tests
-        run: php tests/cloud_caption_planner_test.php
+        run: |
+          php tests/cloud_caption_planner_test.php
+          php tests/cloud_edit_planner_test.php
