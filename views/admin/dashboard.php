@@ -8,6 +8,12 @@
   </div>
 </section>
 
+<div class="finance-toolbar" style="margin-top:8px">
+  <div class="action-row">
+    <a class="button" href="/admin/financeiro"><i class="bi bi-graph-up-arrow"></i> Financeiro e conversão</a>
+    <a class="button button-ghost" href="/admin/afiliados"><i class="bi bi-people"></i> Afiliados e saques</a>
+  </div>
+</div>
 <div class="stats-grid">
   <article><small>Clientes</small><b><?= (int) $stats['users'] ?></b></article>
   <article><small>Licenças ativas</small><b><?= (int) $stats['licenses'] ?></b></article>
