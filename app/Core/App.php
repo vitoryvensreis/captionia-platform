@@ -803,33 +803,33 @@ final class App
 
         $context = $this->apiAccessContext();
 
-        // Cloud Core: never return proprietary algorithms or private prompts to clients.
+        // Authenticated cloud capabilities: opt-in rollout, no legacy timeline changes.
+        if ($method === 'GET' && $path === '/api/v1/core/config') {
+            $enabled = Env::bool('CAPTIONIA_CLOUD_CORE_ENABLED', false);
+            Json::send([
+                'ok' => true,
+                'cloud_core_enabled' => $enabled,
+                'api_schema_version' => 2,
+                'features' => [
+                    'caption_plan' => $enabled,
+                    'edit_plan' => $enabled,
+                    'assets' => false,
+                    'cloud_transcription' => false,
+                ],
+            ]);
+        }
+
         if ($method === 'POST' && $path === '/api/v1/core/captions/plan') {
-            $input = Json::input();
-            $license = $context['license'];
-            $version = (string)($input['client_version'] ?? '');
-            $device = (string)($context['token']['device'] ?? '');
-            if (!$license || !preg_match('/^\\d+\\.\\d+\\.\\d+$/', $version)
-                || !$this->licenses->versionAllowed($license, $version)) {
-                Json::send(['ok' => false, 'error' => 'Licença sem permissão para esta versão.'], 403);
-                return;
-            }
-            $deviceStmt = Database::connection()->prepare(
-                'SELECT 1 FROM license_devices WHERE license_id=? AND device_uuid=? AND revoked_at IS NULL LIMIT 1'
-            );
-            $deviceStmt->execute([(int)$license['id'], $device]);
-            if (!$deviceStmt->fetchColumn()) {
-                Json::send(['ok' => false, 'error' => 'Dispositivo não autorizado.'], 403);
-                return;
+            $this->assertCloudAccess($context, 'captions');
+            if ((int)($_SERVER['CONTENT_LENGTH'] ?? 0) > 1048576) {
+                Json::send(['ok'=>false,'error'=>'Payload muito grande.'], 413);
             }
             try {
-                $result = (new \\CaptionIA\\Services\\CloudCaptionPlanner())->plan($input);
-                header('Cache-Control: no-store');
-                Json::send(['ok' => true] + $result);
-            } catch (\\InvalidArgumentException $e) {
-                Json::send(['ok' => false, 'error' => $e->getMessage()], 422);
+                $result = (new \CaptionIA\Services\CloudCaptionPlanner())->plan(Json::input());
+                Json::send(['ok'=>true] + $result);
+            } catch (\InvalidArgumentException $e) {
+                Json::send(['ok'=>false,'error'=>$e->getMessage()], 422);
             }
-            return;
         }
 
         if ($method === 'GET' && $path === '/api/v1/me') {
@@ -976,6 +976,36 @@ final class App
         }
 
         Json::send(['ok' => false, 'error' => 'Endpoint não encontrado.', 'code' => 'not_found'], 404);
+    }
+
+    /**
+     * Entitlement is based on the SERVER core generation, never solely on
+     * the client-supplied version (which can be forged).
+     */
+    private function assertCloudAccess(array $context, string $feature): void
+    {
+        if (!Env::bool('CAPTIONIA_CLOUD_CORE_ENABLED', false)) {
+            Json::send(['ok'=>false,'error'=>'Cloud Core ainda não foi habilitado.'], 503);
+        }
+        $license = $context['license'];
+        $major = max(1, Env::int('CAPTIONIA_CLOUD_CORE_MAJOR', 3));
+        if (!$license || !$this->licenses->versionAllowed($license, $major . '.0.0')) {
+            Json::send(['ok'=>false,'error'=>'Licença não permite esta geração do Cloud Core.'], 403);
+        }
+        $device = (string)($context['token']['device'] ?? '');
+        $deviceStmt = Database::connection()->prepare(
+            'SELECT 1 FROM license_devices
+             WHERE license_id=? AND device_uuid=? AND revoked_at IS NULL LIMIT 1'
+        );
+        $deviceStmt->execute([(int)$license['id'], $device]);
+        if (!$deviceStmt->fetchColumn()) {
+            Json::send(['ok'=>false,'error'=>'Dispositivo não autorizado.'], 403);
+        }
+        $limit = max(1, min(120, Env::int('CAPTIONIA_CLOUD_MAX_REQUESTS_PER_MINUTE', 30)));
+        if (!(new \CaptionIA\Services\CloudRequestLimiter())->allow((int)$context['user']['id'], $feature, $limit)) {
+            header('Retry-After: 60');
+            Json::send(['ok'=>false,'error'=>'Muitas requisições. Tente novamente em um minuto.'], 429);
+        }
     }
 
     private function apiAccessContext(): array
