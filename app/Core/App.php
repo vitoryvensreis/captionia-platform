@@ -787,6 +787,136 @@ final class App
         $this->redirect('/admin');
     }
 
+
+    private function recordMetric(): void
+    {
+        $origin = (string) ($_SERVER['HTTP_ORIGIN'] ?? '');
+        $expected = 'https://caption.escotilhaprodutora.com';
+        if ($origin !== $expected) {
+            Json::send(['ok' => false, 'error' => 'Origem não autorizada.'], 403);
+        }
+        if ((int) ($_SERVER['CONTENT_LENGTH'] ?? 0) > 1500) {
+            Json::send(['ok' => false, 'error' => 'Evento muito grande.'], 413);
+        }
+        $payload = json_decode((string)file_get_contents('php://input'), true);
+        if (!is_array($payload)) {
+            Json::send(['ok' => false, 'error' => 'Evento inválido.'], 400);
+        }
+        $user = $this->auth->currentUser();
+        $this->finance->track($payload, $user ? (int)$user['id'] : null);
+        Json::send(['ok' => true]);
+    }
+
+    private function affiliatePage(): void
+    {
+        $user = $this->auth->requireUser();
+        $info = $this->affiliates->myDashboard((int)$user['id']);
+        $this->render('affiliate/dashboard', [
+            'title' => 'Meu programa de afiliados — Caption IA',
+            'user' => $user,
+            'affiliate' => $info,
+            'config' => $this->affiliates->config(),
+        ]);
+    }
+
+    private function requestAffiliatePayout(): void
+    {
+        Csrf::validate($_POST['_csrf'] ?? null);
+        $user = $this->auth->requireUser();
+        $amount = AffiliateService::priceCents((string)($_POST['amount'] ?? ''));
+        $this->affiliates->requestWithdrawal(
+            (int)$user['id'], $amount, (string)($_POST['pix_key'] ?? '')
+        );
+        Session::flash('success','Saque solicitado. O valor ficou reservado até a conferência do administrador.');
+        $this->redirect('/afiliados');
+    }
+
+    private function adminAffiliatePage(): void
+    {
+        $this->auth->requireAdmin();
+        $this->affiliates->reconcilePaidOrders();
+        $this->render('admin/affiliates', [
+            'title' => 'Afiliados e saques — Admin Caption IA',
+            'data' => $this->affiliates->adminDashboard(),
+        ]);
+    }
+
+    private function adminAffiliateSettings(): void
+    {
+        Csrf::validate($_POST['_csrf'] ?? null);
+        $this->auth->requireAdmin();
+        $this->affiliates->saveConfig([
+            'enabled' => isset($_POST['enabled']),
+            'percent' => $_POST['percent'] ?? '15',
+            'minimum' => $_POST['minimum'] ?? '50',
+            'hold_days' => $_POST['hold_days'] ?? '14',
+            'auto_enable_buyers' => isset($_POST['auto_enable_buyers']),
+        ]);
+        Session::flash('success','Configurações do programa de afiliados atualizadas.');
+        $this->redirect('/admin/afiliados');
+    }
+
+    private function adminAffiliateUser(int $userId, string $action): void
+    {
+        Csrf::validate($_POST['_csrf'] ?? null);
+        $this->auth->requireAdmin();
+        $this->affiliates->adminSetEnabled($userId, $action === 'ativar');
+        Session::flash('success','Acesso do afiliado atualizado.');
+        $this->redirect('/admin/afiliados');
+    }
+
+    private function adminAffiliateWithdrawal(int $withdrawalId, string $action): void
+    {
+        Csrf::validate($_POST['_csrf'] ?? null);
+        $admin=$this->auth->requireAdmin();
+        $this->affiliates->decideWithdrawal(
+            $withdrawalId, (int)$admin['id'], $action === 'pago' ? 'paid' : 'rejected',
+            (string)($_POST['note'] ?? '')
+        );
+        Session::flash('success', $action === 'pago' ? 'Transferência registrada como paga.' : 'Solicitação recusada; valor devolvido ao saldo disponível.');
+        $this->redirect('/admin/afiliados');
+    }
+
+    private function financePage(): void
+    {
+        $this->auth->requireAdmin();
+        $days=(int)($_GET['dias']??30);
+        $this->affiliates->reconcilePaidOrders(150);
+        $this->render('admin/finance', [
+            'title'=>'Financeiro e funil de vendas — Caption IA',
+            'report'=>$this->finance->summary($days),
+        ]);
+    }
+
+    private function exportFinanceCsv(): void
+    {
+        $this->auth->requireAdmin();
+        $pdo=Database::connection();
+        header('Content-Type: text/csv; charset=UTF-8');
+        header('Content-Disposition: attachment; filename="captionia-vendas.csv"');
+        header('Cache-Control: private, no-store');
+        $stream=fopen('php://output','wb');
+        fwrite($stream, "\xEF\xBB\xBF");
+        fputcsv($stream,['Pedido','Cliente','E-mail','Plano','Valor (centavos)','Status','Criado em','Pago em'],';');
+        $stmt=$pdo->query(
+            'SELECT co.reference_id,u.name,u.email,p.name AS plan_name,
+             co.amount_cents,co.status,co.created_at,co.paid_at
+             FROM checkout_orders co JOIN users u ON u.id=co.user_id
+             JOIN plans p ON p.id=co.plan_id ORDER BY co.id DESC LIMIT 3000'
+        );
+        while ($r=$stmt->fetch()) {
+            $safe=static function(string $value): string {
+                return preg_match('/^[=+\-@\t\r]/u', $value) ? "'" . $value : $value;
+            };
+            fputcsv($stream,[
+                $safe((string)$r['reference_id']),$safe((string)$r['name']),
+                $safe((string)$r['email']),$safe((string)$r['plan_name']),
+                $r['amount_cents'],$r['status'],$r['created_at'],$r['paid_at']??''
+            ],';');
+        }
+        fclose($stream);
+    }
+
     private function pagBankWebhook(): void
     {
         $raw = file_get_contents('php://input') ?: '';
@@ -794,6 +924,15 @@ final class App
 
         try {
             $result = $this->checkout->processWebhook($raw, $signature);
+            if (($result['order']['status'] ?? null) === 'paid') {
+                try {
+                    $this->affiliates->creditPaidOrder($result['order']);
+                } catch (Throwable $error) {
+                    // Payment validation must not be rolled back by analytics/commission storage.
+                    // Admin finance screen reconciles unapplied credits safely and idempotently.
+                    error_log('[Caption IA affiliates] reconciliation required: ' . $error->getMessage());
+                }
+            }
             Json::send(['ok' => true] + $result);
         } catch (RuntimeException $e) {
             error_log('[PagBank webhook] ' . $e->getMessage());
