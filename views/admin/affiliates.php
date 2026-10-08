@@ -1,15 +1,15 @@
 <?php use CaptionIA\Core\View;
-$config=$data['config'];$money=static fn(int $n):string=>'R$ '.number_format($n/100,2,',','.');
+$config=$affiliateReport['config'];$money=static fn(int $n):string=>'R$ '.number_format($n/100,2,',','.');
 ?>
 <main class="dashboard-wrap admin-wrap affiliate-admin">
 <section class="dashboard-head"><div><div class="eyebrow">ADMIN · COMISSÕES</div><h1>Gestão de afiliados</h1>
 <p>Configure percentuais, libere clientes e valide solicitações de saque.</p></div>
 <div class="action-row"><a class="mini-button" href="/admin/financeiro">Financeiro</a><a class="mini-button" href="/admin">Painel geral</a></div></section>
 <div class="stats-grid affiliate-stats">
-<article><small>Vendas com comissão</small><b><?= (int)$data['summary']['total_orders'] ?></b></article>
-<article><small>Comissões geradas</small><b><?= $money((int)$data['summary']['earned_cents']) ?></b></article>
-<article><small>Já liberadas</small><b><?= $money((int)$data['summary']['matured_cents']) ?></b></article>
-<article><small>Saques aguardando</small><b><?= count(array_filter($data['withdrawals'],static fn($w)=>$w['status']==='requested')) ?></b></article>
+<article><small>Vendas com comissão</small><b><?= (int)$affiliateReport['summary']['total_orders'] ?></b></article>
+<article><small>Comissões geradas</small><b><?= $money((int)$affiliateReport['summary']['earned_cents']) ?></b></article>
+<article><small>Já liberadas</small><b><?= $money((int)$affiliateReport['summary']['matured_cents']) ?></b></article>
+<article><small>Saques aguardando</small><b><?= count(array_filter($affiliateReport['withdrawals'],static fn($w)=>$w['status']==='requested')) ?></b></article>
 </div>
 <section class="panel"><div class="panel-title-row"><div><h2>Configurações do programa</h2>
 <p>As novas compras recebem a taxa vigente na criação do pedido. Comissões antigas não mudam.</p></div>
@@ -30,7 +30,7 @@ $config=$data['config'];$money=static fn(int $n):string=>'R$ '.number_format($n/
 </form></section>
 <section class="panel"><h2>Solicitações de saque</h2>
 <div class="table-wrap"><table class="responsive-table"><thead><tr><th>Afiliado</th><th>Valor</th><th>Chave Pix</th><th>Status</th><th>Data</th><th>Conferência</th></tr></thead><tbody>
-<?php foreach($data['withdrawals'] as $w): ?>
+<?php foreach($affiliateReport['withdrawals'] as $w): ?>
 <tr><td><b><?= View::e($w['name']) ?></b><small><?= View::e($w['email']) ?></small></td>
 <td><?= $money((int)$w['amount_cents']) ?></td>
 <td><?= $w['status']==='requested'?View::e($w['pix_key']):'Oculta após análise' ?></td>
@@ -46,12 +46,12 @@ onsubmit="return confirm('Confirma que a transferência Pix JÁ FOI REALIZADA?')
 <button class="mini-button" type="submit">Recusar</button></form>
 <?php else: ?><small><?= View::e($w['admin_note']?:'Concluído') ?></small><?php endif; ?></td></tr>
 <?php endforeach; ?>
-<?php if(!$data['withdrawals']): ?><tr><td colspan="6">Ainda não existem solicitações.</td></tr><?php endif; ?>
+<?php if(!$affiliateReport['withdrawals']): ?><tr><td colspan="6">Ainda não existem solicitações.</td></tr><?php endif; ?>
 </tbody></table></div></section>
 <section class="panel"><h2>Quem pode divulgar?</h2>
 <p class="muted">Libere individualmente ou utilize a ativação automática para clientes com compras confirmadas.</p>
 <div class="table-wrap"><table class="responsive-table"><thead><tr><th>Cliente</th><th>Compras pagas</th><th>Código</th><th>Permissão</th><th>Ação</th></tr></thead><tbody>
-<?php foreach($data['users'] as $u): ?>
+<?php foreach($affiliateReport['users'] as $u): ?>
 <tr><td><b><?= View::e($u['name']) ?></b><small><?= View::e($u['email']) ?></small></td>
 <td><?= (int)$u['paid_orders'] ?></td><td><code><?= View::e($u['code']??'—') ?></code></td>
 <td><?= $u['affiliate_id']?((int)$u['enabled']===1?'Ativo':'Bloqueado'):'Não cadastrado' ?></td>
