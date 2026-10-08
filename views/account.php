@@ -43,6 +43,15 @@ $planUrl = static function (array $plan): string {
   <?php endif; ?>
 </section>
 
+<?php if (!empty($affiliateVisible)): ?>
+<section class="panel" style="margin-bottom:18px">
+  <div class="panel-title-row"><div>
+    <h2>Ganhe indicando o Caption IA</h2>
+    <p>Compartilhe seu link, acompanhe as comissões por venda e solicite saques.</p>
+  </div><a class="button" href="/afiliados">Meu painel de afiliado</a></div>
+</section>
+<?php endif; ?>
+
 <div class="dashboard-grid">
   <section class="panel">
     <h2>Licença</h2>
