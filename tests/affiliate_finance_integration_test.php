@@ -58,6 +58,10 @@ $affiliate->creditPaidOrder($checkout);
 $balance=$affiliate->balance((int)$profile['id']);
 $assert($balance['earned_cents']===1500,'credited 15%, never duplicated');
 $assert($balance['available_cents']===1500,'zero-day hold');
+$pdo->prepare("UPDATE checkout_orders SET status='declined' WHERE id=?")->execute([$checkout['id']]);
+$assert($affiliate->balance((int)$profile['id'])['available_cents']===0,'reversed order excluded from withdrawable balance');
+$pdo->prepare("UPDATE checkout_orders SET status='paid' WHERE id=?")->execute([$checkout['id']]);
+$assert($affiliate->balance((int)$profile['id'])['available_cents']===1500,'valid restored payment reinstates balance');
 
 $another=$createOrder($buyer,'waiting');
 $affiliate->attributeNewOrder($another,$buyer,$profile['code']);
