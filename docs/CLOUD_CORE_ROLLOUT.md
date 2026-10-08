@@ -69,3 +69,47 @@ O importador analisa somente `templates/`, `guias/` e `presets/`.
 - Testes end-to-end, cancelamento, undo, falha de conexão, restart e atualização automática.
 
 **Não publicar a branch em produção como release final.**
+
+
+## Nova transcrição Groq pela plataforma
+
+A partir desta branch há um endpoint **opt-in**:
+`POST /api/v1/core/transcription` (multipart/form-data).
+
+Campos:
+- `file`: áudio em mp3, wav, m4a, ogg, flac, mp4 ou webm, até 24 MB.
+- `language`: vazio ou ISO-639-1 (por exemplo `pt`).
+- `consent=yes`: confirmação explícita de envio ao provedor.
+
+A API só executa com Bearer de usuário licenciado e dispositivo ativo. Usa a
+`GROQ_API_KEY` guardada **somente no .env do servidor**, nunca no plugin.
+O áudio chega ao servidor como arquivo temporário do PHP e é enviado ao
+endpoint oficial de transcrição Groq; a aplicação não salva o upload.
+A API devolve apenas `text`, `language`, `words` com timestamps,
+`model` e `provider`. O plugin guarda a transcrição na sessão local.
+
+Em **staging** e só após confirmar custos e condições de privacidade:
+```dotenv
+CAPTIONIA_CLOUD_CORE_ENABLED=true
+CAPTIONIA_CLOUD_TRANSCRIPTION_ENABLED=true
+CAPTIONIA_CLOUD_TRANSCRIPTION_DAILY_CALLS=12
+GROQ_API_KEY=<definir somente no .env do servidor>
+```
+
+Não comitar o valor da chave, prints de tokens ou áudio de clientes.
+Configure `upload_max_filesize=25M`, `post_max_size=27M`,
+`max_execution_time=210`, `client_max_body_size 27m` no Nginx ou
+limite equivalente no servidor HTTP.
+
+**Limites:** há contagem por usuário/dia e por minuto via banco,
+mas ainda não há cálculo de custo em moeda, controle por minutos de áudio,
+chunking de arquivos grandes ou fila assíncrona.
+Não habilite em escala sem adicionar essas proteções.
+
+**Teste necessário:** áudio com poucas palavras, áudio PT/EN,
+arquivo inválido, dispositivo revogado, 429 diário e cancelamento de rede.
+Observe também a política de privacidade e o consentimento informado.
+
+**Rollback:** desative `CAPTIONIA_CLOUD_TRANSCRIPTION_ENABLED` e mantenha a
+transcrição legada no painel até a homologação. A chave Groq local antiga não
+foi apagada para não causar perda de configuração dos clientes.
