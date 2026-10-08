@@ -987,12 +987,15 @@ final class App
         header('Cache-Control: private, no-store');
         $stream=fopen('php://output','wb');
         fwrite($stream, "\xEF\xBB\xBF");
-        fputcsv($stream,['Pedido','Cliente','E-mail','Plano','Valor (centavos)','Status','Criado em','Pago em'],';');
+        fputcsv($stream,['Pedido','Cliente','E-mail','Plano','Valor original (centavos)','Valor gerencial (centavos)','Arquivada','Status','Criado em','Pago em'],';');
         $stmt=$pdo->query(
             'SELECT co.reference_id,u.name,u.email,p.name AS plan_name,
-             co.amount_cents,co.status,co.created_at,co.paid_at
+             co.amount_cents,ov.display_amount_cents,ov.archived_at,
+             co.status,co.created_at,co.paid_at
              FROM checkout_orders co JOIN users u ON u.id=co.user_id
-             JOIN plans p ON p.id=co.plan_id ORDER BY co.id DESC LIMIT 3000'
+             JOIN plans p ON p.id=co.plan_id
+             LEFT JOIN order_admin_overrides ov ON ov.order_id=co.id
+             ORDER BY co.id DESC LIMIT 3000'
         );
         while ($r=$stmt->fetch()) {
             $safe=static function(string $value): string {
@@ -1001,7 +1004,8 @@ final class App
             fputcsv($stream,[
                 $safe((string)$r['reference_id']),$safe((string)$r['name']),
                 $safe((string)$r['email']),$safe((string)$r['plan_name']),
-                $r['amount_cents'],$r['status'],$r['created_at'],$r['paid_at']??''
+                $r['amount_cents'],$r['display_amount_cents']??$r['amount_cents'],
+                $r['archived_at']?'SIM':'NÃO',$r['status'],$r['created_at'],$r['paid_at']??''
             ],';');
         }
         fclose($stream);
