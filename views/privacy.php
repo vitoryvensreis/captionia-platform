@@ -5,6 +5,7 @@
 <section class="panel"><h2>Métricas opcionais</h2>
 <p>Quando você aceita, registramos as etapas visitadas no site, cliques em planos, abertura do checkout e profundidade da rolagem da página inicial. Essas informações ajudam a melhorar a apresentação e a experiência de compra.</p>
 <p>Não gravamos o texto digitado em formulários, senhas, CPF, dados financeiros ou detalhes do Pix nessas métricas. As visitas usam um identificador aleatório por sessão; eventos de usuários autenticados podem ser associados à conta para análise de conversão.</p>
+<h2>Transcrição de áudio no plugin</h2><p>No modo Nuvem, o áudio selecionado ou exportado da timeline é enviado ao servidor do Caption IA e encaminhado à Groq exclusivamente para gerar a transcrição. O arquivo temporário existe apenas durante o processamento da requisição.</p><p>Ao escolher <strong>Minha chave Groq</strong>, o plugin envia o áudio diretamente à Groq. A chave pessoal permanece armazenada localmente no computador e não é enviada ao servidor do Caption IA.</p>
 <h2>Como mudar a escolha</h2><p>Use o botão abaixo para redefinir seu consentimento neste navegador. Novas métricas só serão enviadas após nova autorização.</p>
 <button type="button" class="button" data-reset-metrics>Redefinir minha preferência</button>
 <p class="muted">O link de afiliado usa um cookie de atribuição, com validade de 30 dias, necessário para reconhecer indicações. O acompanhamento de rolagem é independente e opcional.</p>
