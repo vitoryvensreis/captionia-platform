@@ -284,12 +284,15 @@
               'hosted_checkout' => 'PagBank',
               default => 'PagBank PIX'
           }) ?></td>
-          <td data-label="Valor">R$ <?= number_format(((int) $order['amount_cents']) / 100, 2, ',', '.') ?></td>
+          <td data-label="Valor">
+            <strong>R$ <?= number_format(((int) ($order['display_amount_cents'] ?? $order['amount_cents'])) / 100, 2, ',', '.') ?></strong>
+            <?php if ($order['display_amount_cents']!==null): ?><small class="order-plan-adjusted">Valor gerencial corrigido · original R$ <?= number_format(((int)$order['amount_cents'])/100,2,',','.') ?></small><?php endif; ?>
+          </td>
           <td data-label="Status"><span class="status status-<?= View::e($order['status']) ?>"><?= View::e($order['status']) ?></span></td>
           <td data-label="Data"><?= View::e(date('d/m/Y H:i', strtotime($order['created_at']))) ?></td>
           <td data-label="Ação">
             <div class="action-row order-payment-actions">
-              <a class="mini-button" href="/admin/pagamentos/<?= View::e(rawurlencode($order['reference_id'])) ?>/editar">Editar acesso</a>
+              <a class="mini-button" href="/admin/pagamentos/<?= View::e(rawurlencode($order['reference_id'])) ?>/editar">Editar venda</a>
             <?php if (($order['provider_mode'] ?? '') === 'bacen_static_pix' && $order['status'] === 'waiting'): ?>
               <form method="post" action="/admin/pagamentos/<?= View::e($order['reference_id']) ?>/confirmar-pix" onsubmit="return confirm('Confirma que o Pix foi recebido? A licença será liberada.');">
                 <input type="hidden" name="_csrf" value="<?= View::e($csrf) ?>">
