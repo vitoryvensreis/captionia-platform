@@ -832,6 +832,19 @@ final class App
             }
         }
 
+        if ($method === 'POST' && $path === '/api/v1/core/edit/plan') {
+            $this->assertCloudAccess($context, 'edit');
+            if ((int)($_SERVER['CONTENT_LENGTH'] ?? 0) > 1048576) {
+                Json::send(['ok'=>false,'error'=>'Payload muito grande.'], 413);
+            }
+            try {
+                $plan = (new \CaptionIA\Services\CloudEditPlanner())->plan(Json::input());
+                Json::send(['ok'=>true] + $plan);
+            } catch (\InvalidArgumentException $e) {
+                Json::send(['ok'=>false,'error'=>$e->getMessage()], 422);
+            }
+        }
+
         if ($method === 'GET' && $path === '/api/v1/me') {
             Json::send([
                 'ok' => true,
