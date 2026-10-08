@@ -198,3 +198,21 @@ body{overflow-x:hidden}
 .suite-rail .rail-form{width:100%;flex-shrink:0}
 .admin-wrap .stats-grid article{min-width:0;overflow-wrap:break-word}
 @media(max-width:980px){.suite-rail{display:none}}
+
+
+/* Admin purchase corrections: keep financial receipt visually separate from access. */
+.order-editor .dashboard-head{align-items:center}
+.order-purchase-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;padding:14px 0}
+.order-purchase-grid>div{background:#101010;border:1px solid #303030;border-radius:12px;padding:16px;display:flex;flex-direction:column;gap:6px;min-width:0}
+.order-purchase-grid small{font-size:11px;color:#959595}
+.order-purchase-grid strong{font-size:15px;overflow-wrap:anywhere}
+.order-purchase-grid span{color:#b6b6b6;font-size:12px;overflow-wrap:anywhere}
+.order-editor .panel+.panel{margin-top:18px}
+.order-editor .settings-form textarea{background:#111;color:#f4f4f4;border:1px solid #3c3c3c;border-radius:10px;padding:12px;width:100%;resize:vertical;min-height:90px}
+.order-editor .settings-form input[type=date]{color-scheme:dark}
+.order-editor .settings-form input:disabled{opacity:.45}
+.order-plan-adjusted{display:block;margin-top:5px;font-size:11px;color:#ffad85}
+.order-payment-actions{flex-wrap:wrap;gap:7px;align-items:center}
+.order-editor .responsive-table td small{display:block;margin-top:4px;color:#929292;font-size:11px}
+@media(max-width:900px){.order-purchase-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:550px){.order-purchase-grid{grid-template-columns:1fr}.order-editor .dashboard-head{align-items:flex-start}}
