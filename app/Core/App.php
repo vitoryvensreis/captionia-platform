@@ -9,6 +9,7 @@ use CaptionIA\Services\CheckoutService;
 use CaptionIA\Services\LicenseService;
 use CaptionIA\Services\PagBankService;
 use CaptionIA\Services\PixBacenService;
+use CaptionIA\Services\ReleaseService;
 use CaptionIA\Services\SettingsService;
 use RuntimeException;
 use Throwable;
@@ -22,6 +23,7 @@ final class App
     private ApiTokenService $tokens;
     private SettingsService $settings;
     private PixBacenService $pixBacen;
+    private ReleaseService $releases;
 
     public function __construct(private readonly string $basePath)
     {
@@ -34,6 +36,7 @@ final class App
         $this->pagBank = new PagBankService($basePath);
         $this->settings = new SettingsService();
         $this->pixBacen = new PixBacenService();
+        $this->releases = new ReleaseService($basePath);
         $this->checkout = new CheckoutService(
             $basePath,
             $this->pagBank,
@@ -149,6 +152,14 @@ final class App
             }
             if ($method === 'POST' && preg_match('#^/admin/planos/(\d+)/editar$#', $path, $m)) {
                 $this->adminUpdatePlan((int) $m[1]);
+                return;
+            }
+            if ($method === 'POST' && $path === '/admin/releases/publicar') {
+                $this->adminPublishRelease();
+                return;
+            }
+            if ($method === 'POST' && preg_match('#^/admin/releases/(\d+)/(ativar|desativar)$#', $path, $m)) {
+                $this->adminReleaseAction((int) $m[1], $m[2]);
                 return;
             }
             if ($method === 'POST' && $path === '/admin/configuracoes/pagamentos') {
@@ -409,6 +420,7 @@ final class App
             'users' => $users,
             'orders' => $orders,
             'plans' => $plans,
+            'releases' => $this->releases->listAll(),
             'paymentSettings' => $this->settings->paymentSettings(),
             'pagbankConfigured' => $this->pagBank->configured(),
         ]);
@@ -509,6 +521,56 @@ final class App
         ]);
 
         Session::flash('success', 'Plano atualizado.');
+        $this->redirect('/admin');
+    }
+
+    private function adminPublishRelease(): void
+    {
+        Csrf::validate($_POST['_csrf'] ?? null);
+        $admin = $this->auth->requireAdmin();
+
+        $release = $this->releases->publishUploaded(
+            $_FILES['release_zip'] ?? [],
+            (string) ($_POST['version'] ?? ''),
+            (string) ($_POST['notes'] ?? '')
+        );
+
+        Database::connection()->prepare(
+            'INSERT INTO audit_logs (user_id,event_type,metadata_json,created_at)
+             VALUES (?,\'release.published\',?,NOW())'
+        )->execute([
+            $admin['id'],
+            json_encode([
+                'version' => $release['version'],
+                'sha256' => $release['sha256'],
+                'file_size' => (int) $release['file_size'],
+            ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+        ]);
+
+        Session::flash('success', 'Atualização ' . $release['version'] . ' publicada para o atualizador automático.');
+        $this->redirect('/admin');
+    }
+
+    private function adminReleaseAction(int $releaseId, string $action): void
+    {
+        Csrf::validate($_POST['_csrf'] ?? null);
+        $admin = $this->auth->requireAdmin();
+
+        $active = $action === 'ativar';
+        $this->releases->setActive($releaseId, $active);
+
+        Database::connection()->prepare(
+            'INSERT INTO audit_logs (user_id,event_type,metadata_json,created_at)
+             VALUES (?,\'release.status_changed\',?,NOW())'
+        )->execute([
+            $admin['id'],
+            json_encode([
+                'release_id' => $releaseId,
+                'active' => $active,
+            ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+        ]);
+
+        Session::flash('success', $active ? 'Release ativada.' : 'Release desativada.');
         $this->redirect('/admin');
     }
 
@@ -658,11 +720,12 @@ final class App
         }
 
         if ($method === 'GET' && $path === '/api/v1/config') {
+            $currentRelease = $this->releases->currentVersionInfo();
             Json::send([
                 'ok' => true,
                 'api_version' => 'v1',
-                'current_version' => Env::get('CAPTIONIA_CURRENT_VERSION', '3.2.3'),
-                'current_major' => Env::int('CAPTIONIA_CURRENT_MAJOR', 3),
+                'current_version' => $currentRelease['version'],
+                'current_major' => $currentRelease['major'],
                 'endpoints' => [
                     'login' => '/api/v1/auth/login',
                     'refresh' => '/api/v1/auth/refresh',
@@ -825,25 +888,18 @@ final class App
                     'ok' => true,
                     'available' => false,
                     'reason' => 'no_active_license',
+                    'release' => null,
                 ]);
             }
 
-            $stmt = Database::connection()->query(
-                'SELECT version,major_version,file_path,published_at
-                 FROM releases
-                 WHERE active=1
-                 ORDER BY published_at DESC,id DESC
-                 LIMIT 1'
-            );
-            $release = $stmt->fetch();
-
+            $release = $this->releases->latestActive();
             if (!$release) {
-                $release = [
-                    'version' => Env::get('CAPTIONIA_CURRENT_VERSION', '3.2.3'),
-                    'major_version' => Env::int('CAPTIONIA_CURRENT_MAJOR', 3),
-                    'file_path' => null,
-                    'published_at' => null,
-                ];
+                Json::send([
+                    'ok' => true,
+                    'available' => false,
+                    'reason' => 'no_release',
+                    'release' => null,
+                ]);
             }
 
             $allowed = $this->licenses->versionAllowed($license, (string) $release['version']);
@@ -851,15 +907,43 @@ final class App
             Json::send([
                 'ok' => true,
                 'available' => $allowed,
+                'reason' => $allowed ? null : 'version_not_allowed',
                 'release' => [
                     'version' => $release['version'],
                     'major_version' => (int) $release['major_version'],
-                    'download_url' => $allowed && !empty($release['file_path'])
-                        ? rtrim(Env::get('APP_URL', '') ?: '', '/') . '/downloads/' . rawurlencode((string) $release['version'])
+                    'download_url' => $allowed
+                        ? rtrim(Env::get('APP_URL', '') ?: '', '/') . '/api/v1/releases/' . rawurlencode((string) $release['version']) . '/download'
                         : null,
+                    'sha256' => $allowed ? (string) ($release['sha256'] ?? '') : null,
+                    'file_size' => $allowed ? (int) ($release['file_size'] ?? 0) : null,
+                    'notes' => $allowed ? ($release['notes'] ?? null) : null,
                     'published_at' => $release['published_at'],
                 ],
             ]);
+        }
+
+        if (
+            $method === 'GET'
+            && preg_match('#^/api/v1/releases/([0-9A-Za-z.+-]+)/download$#', $path, $m)
+        ) {
+            $release = $this->releases->findActiveByVersion(rawurldecode($m[1]));
+            if (!$release) {
+                Json::send(['ok' => false, 'error' => 'Release não encontrada.'], 404);
+            }
+
+            $license = $context['license'];
+            if (!$license || !$this->licenses->versionAllowed($license, (string) $release['version'])) {
+                Json::send(['ok' => false, 'error' => 'Sua licença não permite baixar esta versão.'], 403);
+            }
+
+            $file = $this->releases->absolutePath($release);
+            header('Content-Type: application/zip');
+            header('Content-Length: ' . (string) filesize($file));
+            header('Content-Disposition: attachment; filename="CaptionIA-' . $release['version'] . '.zip"');
+            header('Cache-Control: private, no-store');
+            header('X-Content-Type-Options: nosniff');
+            readfile($file);
+            return;
         }
 
         Json::send(['ok' => false, 'error' => 'Endpoint não encontrado.', 'code' => 'not_found'], 404);

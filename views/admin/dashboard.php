@@ -179,6 +179,72 @@
 </section>
 
 <section class="panel">
+  <div class="panel-title-row">
+    <div>
+      <h2>Atualizações do plugin</h2>
+      <p>Publique o ZIP oficial para que o Caption IA baixe e aplique a nova versão automaticamente.</p>
+    </div>
+    <span class="status"><?= count($releases) ?> release(s)</span>
+  </div>
+
+  <form method="post" action="/admin/releases/publicar" enctype="multipart/form-data" class="settings-form release-admin-form">
+    <input type="hidden" name="_csrf" value="<?= View::e($csrf) ?>">
+
+    <div class="form-grid">
+      <label>Versão
+        <input name="version" placeholder="3.4.0" pattern="[0-9]+\.[0-9]+\.[0-9]+(?:[-+][0-9A-Za-z.-]+)?" required>
+      </label>
+      <label>ZIP da versão
+        <input name="release_zip" type="file" accept=".zip,application/zip" required>
+      </label>
+    </div>
+
+    <label>Notas da atualização
+      <textarea name="notes" maxlength="4000" rows="4" placeholder="Ex.: melhorias no AutoEdit, correções no Karaoke e ajustes de interface."></textarea>
+    </label>
+
+    <div class="settings-help">
+      O ZIP deve ser o pacote oficial gerado pelo repositório do plugin e conter a pasta <code>CaptionIA/</code>.
+      O servidor calcula SHA-256 e o plugin valida a integridade antes de preparar a atualização.
+    </div>
+
+    <button class="button" type="submit">Publicar atualização</button>
+  </form>
+
+  <?php if ($releases): ?>
+    <div class="table-wrap">
+      <table class="responsive-table">
+        <thead><tr><th>Versão</th><th>Tamanho</th><th>SHA-256</th><th>Publicada</th><th>Status</th><th>Ação</th></tr></thead>
+        <tbody>
+        <?php foreach ($releases as $release): ?>
+          <tr>
+            <td data-label="Versão"><b><?= View::e($release['version']) ?></b></td>
+            <td data-label="Tamanho"><?= number_format(((int) ($release['file_size'] ?? 0)) / 1048576, 1, ',', '.') ?> MB</td>
+            <td data-label="SHA-256"><code title="<?= View::e($release['sha256'] ?? '') ?>"><?= View::e(substr((string) ($release['sha256'] ?? ''), 0, 12)) ?>…</code></td>
+            <td data-label="Publicada"><?= View::e(date('d/m/Y H:i', strtotime($release['published_at']))) ?></td>
+            <td data-label="Status"><span class="status <?= (int) $release['active'] === 1 ? 'status-paid' : '' ?>"><?= (int) $release['active'] === 1 ? 'Ativa' : 'Inativa' ?></span></td>
+            <td data-label="Ação">
+              <form method="post" action="/admin/releases/<?= (int) $release['id'] ?>/<?= (int) $release['active'] === 1 ? 'desativar' : 'ativar' ?>">
+                <input type="hidden" name="_csrf" value="<?= View::e($csrf) ?>">
+                <button class="mini-button" type="submit"><?= (int) $release['active'] === 1 ? 'Desativar' : 'Ativar' ?></button>
+              </form>
+            </td>
+          </tr>
+          <?php if (!empty($release['notes'])): ?>
+            <tr class="release-notes-row">
+              <td colspan="6"><small><?= nl2br(View::e($release['notes'])) ?></small></td>
+            </tr>
+          <?php endif; ?>
+        <?php endforeach; ?>
+        </tbody>
+      </table>
+    </div>
+  <?php else: ?>
+    <p class="muted">Nenhuma atualização publicada ainda.</p>
+  <?php endif; ?>
+</section>
+
+<section class="panel">
   <h2>Liberar licença manualmente</h2>
   <p class="muted">Crie uma licença para qualquer cliente cadastrado usando qualquer plano existente.</p>
   <form method="post" action="/admin/licencas/criar" class="admin-inline-form">

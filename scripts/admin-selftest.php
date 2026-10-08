@@ -46,6 +46,9 @@ $requiredColumns = [
     ['plans', 'description'],
     ['plans', 'featured'],
     ['plans', 'sort_order'],
+    ['releases', 'sha256'],
+    ['releases', 'file_size'],
+    ['releases', 'notes'],
 ];
 
 foreach ($requiredColumns as [$table, $column]) {

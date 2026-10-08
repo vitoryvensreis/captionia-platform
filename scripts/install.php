@@ -68,6 +68,16 @@ try {
         $pdo->exec("ALTER TABLE refresh_tokens MODIFY COLUMN device_uuid VARCHAR(128) NOT NULL");
     }
 
+    if (!columnExists($pdo, 'releases', 'sha256')) {
+        $pdo->exec("ALTER TABLE releases ADD COLUMN sha256 CHAR(64) NULL AFTER file_path");
+    }
+    if (!columnExists($pdo, 'releases', 'file_size')) {
+        $pdo->exec("ALTER TABLE releases ADD COLUMN file_size BIGINT UNSIGNED NULL AFTER sha256");
+    }
+    if (!columnExists($pdo, 'releases', 'notes')) {
+        $pdo->exec("ALTER TABLE releases ADD COLUMN notes TEXT NULL AFTER file_size");
+    }
+
     if (!columnExists($pdo, 'checkout_orders', 'provider_mode')) {
         $pdo->exec("ALTER TABLE checkout_orders ADD COLUMN provider_mode VARCHAR(32) NOT NULL DEFAULT 'transparent_pix' AFTER amount_cents");
     }

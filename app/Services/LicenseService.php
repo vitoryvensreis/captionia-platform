@@ -92,8 +92,7 @@ final class LicenseService
                 $newExpiry = date('Y-m-d H:i:s', $baseTs + $this->subscriptionDurationSeconds((string) $fresh['billing_interval']));
 
                 if ($license) {
-                    $version = Env::get('CAPTIONIA_CURRENT_VERSION', '3.2.3') ?: '3.2.3';
-                    $major = max(1, Env::int('CAPTIONIA_CURRENT_MAJOR', 3));
+                    [$version, $major] = $this->currentVersionInfo();
                     $pdo->prepare(
                         'UPDATE licenses
                          SET expires_at=?,status=\'active\',
@@ -116,8 +115,7 @@ final class LicenseService
                         $license['id'],
                     ]);
                 } else {
-                    $version = Env::get('CAPTIONIA_CURRENT_VERSION', '3.2.3') ?: '3.2.3';
-                    $major = max(1, Env::int('CAPTIONIA_CURRENT_MAJOR', 3));
+                    [$version, $major] = $this->currentVersionInfo();
                     $pdo->prepare(
                         'INSERT INTO licenses
                          (user_id,plan_id,status,purchased_version,max_major_version,expires_at,created_at,updated_at)
@@ -237,8 +235,7 @@ final class LicenseService
         }
 
         if ($row['type'] === 'lifetime') {
-            $version = Env::get('CAPTIONIA_CURRENT_VERSION', '3.2.3') ?: '3.2.3';
-            $major = max(1, Env::int('CAPTIONIA_CURRENT_MAJOR', 3));
+            [$version, $major] = $this->currentVersionInfo();
             $pdo->prepare(
                 'INSERT INTO licenses
                  (user_id,plan_id,status,purchased_version,max_major_version,expires_at,created_at,updated_at)
@@ -246,8 +243,7 @@ final class LicenseService
             )->execute([$userId, $row['id'], $version, $major]);
         } else {
             $expiry = date('Y-m-d H:i:s', time() + $this->subscriptionDurationSeconds((string) $row['billing_interval']));
-            $version = Env::get('CAPTIONIA_CURRENT_VERSION', '3.2.3') ?: '3.2.3';
-            $major = max(1, Env::int('CAPTIONIA_CURRENT_MAJOR', 3));
+            [$version, $major] = $this->currentVersionInfo();
             $pdo->prepare(
                 'INSERT INTO licenses
                  (user_id,plan_id,status,purchased_version,max_major_version,expires_at,created_at,updated_at)
@@ -260,6 +256,30 @@ final class LicenseService
                 $expiry,
             ]);
         }
+    }
+
+    private function currentVersionInfo(): array
+    {
+        try {
+            $row = Database::connection()
+                ->query(
+                    "SELECT version,major_version
+                     FROM releases
+                     WHERE active=1
+                     ORDER BY published_at DESC,id DESC
+                     LIMIT 1"
+                )
+                ->fetch();
+
+            if ($row) {
+                return [(string) $row['version'], max(1, (int) $row['major_version'])];
+            }
+        } catch (\Throwable) {
+        }
+
+        $version = Env::get('CAPTIONIA_CURRENT_VERSION', '3.3.0') ?: '3.3.0';
+        $major = max(1, Env::int('CAPTIONIA_CURRENT_MAJOR', (int) explode('.', ltrim($version, 'vV'))[0]));
+        return [$version, $major];
     }
 
     private function subscriptionDurationSeconds(string $billingInterval): int

@@ -159,3 +159,6 @@ body{overflow-x:hidden}
   .hero-center h1{font-size:36px}
   .price-card,.panel{padding:16px}
 }
+
+.release-admin-form{margin-bottom:18px}.release-admin-form input[type="file"]{padding:10px;background:#0f0f0f}.release-notes-row td{padding-top:0!important;color:#909090}.release-notes-row small{display:block;max-width:900px;line-height:1.5}
+@media(max-width:760px){.release-admin-form .form-grid{grid-template-columns:1fr}.release-notes-row{display:none!important}}
