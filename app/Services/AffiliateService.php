@@ -230,8 +230,8 @@ final class AffiliateService
         $pdo = Database::connection();
         $stmt = $pdo->prepare(
             "SELECT
-              COALESCE(SUM(CASE WHEN ac.status='earned' THEN amount_cents ELSE 0 END),0) AS total,
-              COALESCE(SUM(CASE WHEN ac.status='earned' AND available_at<=NOW() THEN amount_cents ELSE 0 END),0) AS matured
+              COALESCE(SUM(CASE WHEN ac.status='earned' THEN ac.amount_cents ELSE 0 END),0) AS total,
+              COALESCE(SUM(CASE WHEN ac.status='earned' AND available_at<=NOW() THEN ac.amount_cents ELSE 0 END),0) AS matured
              FROM affiliate_commissions ac
              JOIN checkout_orders co ON co.id=ac.order_id
              WHERE ac.affiliate_id=? AND co.status='paid'"
