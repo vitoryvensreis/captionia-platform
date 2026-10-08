@@ -137,6 +137,10 @@ final class App
                 $this->accountPage();
                 return;
             }
+            if ($method === 'GET' && preg_match('#^/minha-conta/baixar/([0-9A-Za-z.+-]+)$#D', $path, $match)) {
+                $this->downloadCustomerRelease($match[1]);
+                return;
+            }
 
             if ($method === 'GET' && $path === '/admin') {
                 $this->adminPage();
@@ -362,14 +366,46 @@ final class App
             $devices = $stmt->fetchAll();
         }
 
+        $release = $this->releases->latestActive();
+
         $this->render('account', [
             'title' => 'Minha conta — Caption IA',
             'user' => $user,
             'license' => $license,
+            'release' => $release,
+            'release_allowed' => $license && $release
+                ? $this->licenses->versionAllowed($license, (string)$release['version'])
+                : false,
             'devices' => $devices,
             'orders' => $this->checkout->ordersForUser((int) $user['id']),
             'plans' => $this->plans(),
         ]);
+    }
+
+    /**
+     * O link de download do painel web é protegido pela sessão e pela licença,
+     * sem expor token Bearer em URL ou HTML. O ZIP fica fora de public/.
+     */
+    private function downloadCustomerRelease(string $version): void
+    {
+        $user = $this->auth->requireUser();
+        $license = $this->licenses->activeLicenseForUser((int)$user['id']);
+        $release = $this->releases->findActiveByVersion($version);
+
+        if (!$release) {
+            Json::send(['ok'=>false,'error'=>'Versão não disponível.'], 404);
+        }
+        if (!$license || !$this->licenses->versionAllowed($license, (string)$release['version'])) {
+            Json::send(['ok'=>false,'error'=>'Licença sem acesso a esta versão.'], 403);
+        }
+
+        $file = $this->releases->absolutePath($release);
+        header('Content-Type: application/zip');
+        header('Content-Length: ' . (string)filesize($file));
+        header('Content-Disposition: attachment; filename="CaptionIA-' . $release['version'] . '.zip"');
+        header('Cache-Control: private, no-store');
+        header('X-Content-Type-Options: nosniff');
+        readfile($file);
     }
 
     private function adminPage(): void
@@ -803,6 +839,97 @@ final class App
 
         $context = $this->apiAccessContext();
 
+        // Authenticated cloud capabilities: opt-in rollout, no legacy timeline changes.
+        if ($method === 'GET' && $path === '/api/v1/core/config') {
+            $enabled = Env::bool('CAPTIONIA_CLOUD_CORE_ENABLED', false);
+            Json::send([
+                'ok' => true,
+                'cloud_core_enabled' => $enabled,
+                'api_schema_version' => 2,
+                'features' => [
+                    'caption_plan' => $enabled,
+                    'edit_plan' => $enabled,
+                    'assets' => $enabled && Env::bool('CAPTIONIA_CLOUD_ASSETS_ENABLED', false),
+                    'cloud_transcription' => $enabled && Env::bool('CAPTIONIA_CLOUD_TRANSCRIPTION_ENABLED', false) && str_starts_with((string)Env::get('GROQ_API_KEY', ''), 'gsk_'),
+                ],
+            ]);
+        }
+
+        if ($method === 'POST' && $path === '/api/v1/core/captions/plan') {
+            $this->assertCloudAccess($context, 'captions');
+            if ((int)($_SERVER['CONTENT_LENGTH'] ?? 0) > 1048576) {
+                Json::send(['ok'=>false,'error'=>'Payload muito grande.'], 413);
+            }
+            try {
+                $result = (new \CaptionIA\Services\CloudCaptionPlanner())->plan(Json::input());
+                Json::send(['ok'=>true] + $result);
+            } catch (\InvalidArgumentException $e) {
+                Json::send(['ok'=>false,'error'=>$e->getMessage()], 422);
+            }
+        }
+
+        if ($method === 'POST' && $path === '/api/v1/core/edit/plan') {
+            $this->assertCloudAccess($context, 'edit');
+            if ((int)($_SERVER['CONTENT_LENGTH'] ?? 0) > 1048576) {
+                Json::send(['ok'=>false,'error'=>'Payload muito grande.'], 413);
+            }
+            try {
+                $plan = (new \CaptionIA\Services\CloudEditPlanner())->plan(Json::input());
+                Json::send(['ok'=>true] + $plan);
+            } catch (\InvalidArgumentException $e) {
+                Json::send(['ok'=>false,'error'=>$e->getMessage()], 422);
+            }
+        }
+
+        if ($method === 'GET' && $path === '/api/v1/core/assets') {
+            $this->assertCloudAccess($context, 'asset_catalog');
+            if (!Env::bool('CAPTIONIA_CLOUD_ASSETS_ENABLED', false)) {
+                Json::send(['ok'=>false,'error'=>'Biblioteca na nuvem ainda indisponível.'], 503);
+            }
+            Json::send(['ok'=>true,'assets'=>(new \CaptionIA\Services\CloudAssetService($this->basePath))->catalog()]);
+        }
+
+        if ($method === 'GET' && preg_match('#^/api/v1/core/assets/([a-f0-9]{64})$#D', $path, $assetMatch)) {
+            $this->assertCloudAccess($context, 'asset_download');
+            if (!Env::bool('CAPTIONIA_CLOUD_ASSETS_ENABLED', false)) {
+                Json::send(['ok'=>false,'error'=>'Biblioteca na nuvem ainda indisponível.'], 503);
+            }
+            $payload = (new \CaptionIA\Services\CloudAssetService($this->basePath))->fetch($assetMatch[1]);
+            header('Content-Type: ' . $payload['mime']);
+            header('Content-Length: ' . $payload['bytes']);
+            header('Content-Disposition: attachment; filename="captionia-' . $assetMatch[1] . '"');
+            header('X-Content-Type-Options: nosniff');
+            header('Cache-Control: private, no-store');
+            echo $payload['data'];
+            exit;
+        }
+
+        if ($method === 'POST' && $path === '/api/v1/core/transcription') {
+            if (!Env::bool('CAPTIONIA_CLOUD_TRANSCRIPTION_ENABLED', false)) {
+                Json::send(['ok'=>false,'error'=>'Transcrição na nuvem indisponível.'], 503);
+            }
+            $this->assertCloudAccess($context, 'transcribe');
+            if (($_POST['consent'] ?? '') !== 'yes') {
+                Json::send(['ok'=>false,'error'=>'Consentimento para enviar áudio é obrigatório.'], 422);
+            }
+            if ((int)($_SERVER['CONTENT_LENGTH'] ?? 0) > 25000000) {
+                Json::send(['ok'=>false,'error'=>'Arquivo excede o limite do serviço.'], 413);
+            }
+            $daily = max(1,min(100,Env::int('CAPTIONIA_CLOUD_TRANSCRIPTION_DAILY_CALLS', 12)));
+            if (!(new \CaptionIA\Services\CloudRequestLimiter())->allowDaily(
+                (int)$context['user']['id'], 'groq', $daily)) {
+                header('Retry-After: 3600');
+                Json::send(['ok'=>false,'error'=>'Limite diário de transcrições atingido.'], 429);
+            }
+            try {
+                $result = (new \CaptionIA\Services\CloudTranscriptionService())
+                    ->transcribe($_FILES['file'] ?? [], trim((string)($_POST['language'] ?? '')));
+                Json::send(['ok'=>true] + $result);
+            } catch (\InvalidArgumentException $e) {
+                Json::send(['ok'=>false,'error'=>$e->getMessage()], 422);
+            }
+        }
+
         if ($method === 'GET' && $path === '/api/v1/me') {
             Json::send([
                 'ok' => true,
@@ -949,6 +1076,36 @@ final class App
         Json::send(['ok' => false, 'error' => 'Endpoint não encontrado.', 'code' => 'not_found'], 404);
     }
 
+    /**
+     * Entitlement is based on the SERVER core generation, never solely on
+     * the client-supplied version (which can be forged).
+     */
+    private function assertCloudAccess(array $context, string $feature): void
+    {
+        if (!Env::bool('CAPTIONIA_CLOUD_CORE_ENABLED', false)) {
+            Json::send(['ok'=>false,'error'=>'Cloud Core ainda não foi habilitado.'], 503);
+        }
+        $license = $context['license'];
+        $major = max(1, Env::int('CAPTIONIA_CLOUD_CORE_MAJOR', 3));
+        if (!$license || !$this->licenses->versionAllowed($license, $major . '.0.0')) {
+            Json::send(['ok'=>false,'error'=>'Licença não permite esta geração do Cloud Core.'], 403);
+        }
+        $device = (string)($context['token']['device'] ?? '');
+        $deviceStmt = Database::connection()->prepare(
+            'SELECT 1 FROM license_devices
+             WHERE license_id=? AND device_uuid=? AND revoked_at IS NULL LIMIT 1'
+        );
+        $deviceStmt->execute([(int)$license['id'], $device]);
+        if (!$deviceStmt->fetchColumn()) {
+            Json::send(['ok'=>false,'error'=>'Dispositivo não autorizado.'], 403);
+        }
+        $limit = $feature === 'transcribe' ? 2 : max(1, min(120, Env::int('CAPTIONIA_CLOUD_MAX_REQUESTS_PER_MINUTE', 30)));
+        if (!(new \CaptionIA\Services\CloudRequestLimiter())->allow((int)$context['user']['id'], $feature, $limit)) {
+            header('Retry-After: 60');
+            Json::send(['ok'=>false,'error'=>'Muitas requisições. Tente novamente em um minuto.'], 429);
+        }
+    }
+
     private function apiAccessContext(): array
     {
         $token = $this->tokens->verifyAccessToken($this->bearerToken());
@@ -981,6 +1138,10 @@ final class App
 
     private function sendApiCorsHeaders(): void
     {
+        header('Cache-Control: no-store, private');
+        header('Pragma: no-cache');
+        header('X-Content-Type-Options: nosniff');
+        header('Referrer-Policy: no-referrer');
         header('Access-Control-Allow-Origin: *');
         header('Access-Control-Allow-Headers: Authorization, Content-Type, X-Client-Version');
         header('Access-Control-Allow-Methods: GET, POST, DELETE, OPTIONS');

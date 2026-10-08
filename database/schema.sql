@@ -180,3 +180,27 @@ CREATE TABLE IF NOT EXISTS audit_logs (
     INDEX idx_audit_user_created (user_id,created_at),
     CONSTRAINT fk_audit_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+
+-- Cloud Core: counters are server-owned and indexed by user, feature and minute.
+CREATE TABLE IF NOT EXISTS cloud_rate_windows (
+    user_id BIGINT UNSIGNED NOT NULL,
+    feature VARCHAR(60) NOT NULL,
+    window_start DATETIME NOT NULL,
+    hits INT UNSIGNED NOT NULL DEFAULT 0,
+    PRIMARY KEY (user_id,feature,window_start),
+    INDEX idx_cloud_window_cleanup (window_start),
+    CONSTRAINT fk_cloud_rate_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+
+CREATE TABLE IF NOT EXISTS cloud_assets (
+  id CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL PRIMARY KEY,
+  label VARCHAR(255) NOT NULL,
+  category VARCHAR(40) NOT NULL,
+  mime VARCHAR(100) NOT NULL,
+  byte_size BIGINT UNSIGNED NOT NULL,
+  active TINYINT(1) NOT NULL DEFAULT 0,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  INDEX idx_cloud_assets_catalog (active,category,label)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

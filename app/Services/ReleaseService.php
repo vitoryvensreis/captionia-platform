@@ -217,7 +217,7 @@ final class ReleaseService
     private function validatePackage(string $zipPath, string $version): void
     {
         if (!class_exists(ZipArchive::class)) {
-            return;
+            throw new RuntimeException('Extensão PHP zip é obrigatória para validar e publicar um instalador.');
         }
 
         $zip = new ZipArchive();

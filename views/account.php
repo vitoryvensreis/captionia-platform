@@ -25,6 +25,24 @@ $planUrl = static function (array $plan): string {
   <?php endif; ?>
 </section>
 
+<section class="panel" style="margin-bottom:18px;">
+  <h2>Instalar ou atualizar o Caption IA</h2>
+  <?php if (!empty($release_allowed) && !empty($release)): ?>
+    <p>Versão disponível: <strong><?= View::e($release['version']) ?></strong></p>
+    <p class="muted">O instalador inclui o plugin e seus recursos. Faça login no Premiere com a mesma conta para ativar a licença. A transcrição por IA usa a GROQ na nuvem, sem chave local.</p>
+    <div class="account-actions">
+      <a class="button" href="/minha-conta/baixar/<?= View::e(rawurlencode((string)$release['version'])) ?>">
+        <i class="bi bi-download"></i> Baixar Caption IA <?= View::e($release['version']) ?> para Windows
+      </a>
+    </div>
+    <p class="muted">Extraia o ZIP, feche o Premiere e execute INSTALAR_CAPTION_IA.bat. A versão não assinada deverá ser homologada antes da distribuição pública.</p>
+  <?php elseif (!empty($release) && !empty($license)): ?>
+    <p>O download da versão atual não está incluído na sua licença. Consulte sua assinatura.</p>
+  <?php else: ?>
+    <p class="muted">O instalador será disponibilizado após a publicação de uma versão autorizada.</p>
+  <?php endif; ?>
+</section>
+
 <div class="dashboard-grid">
   <section class="panel">
     <h2>Licença</h2>

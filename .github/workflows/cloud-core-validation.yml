@@ -1,0 +1,25 @@
+name: Cloud Core validation
+on:
+  push:
+    branches: [feat/cloud-core-phase1-20261007]
+  pull_request:
+    branches: [main]
+jobs:
+  php:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: mbstring, pdo_mysql, curl, zip
+          tools: composer
+      - name: Install composer autoloader
+        run: composer install --no-interaction --no-progress
+      - name: Syntax check PHP
+        run: find app tests -name '*.php' -print0 | xargs -0 -n 1 php -l
+      - name: Caption planner regression tests
+        run: |
+          php tests/cloud_caption_planner_test.php
+          php tests/cloud_edit_planner_test.php
+          php tests/cloud_asset_crypto_test.php
