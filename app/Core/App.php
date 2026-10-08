@@ -1102,6 +1102,10 @@ final class App
 
     private function sendApiCorsHeaders(): void
     {
+        header('Cache-Control: no-store, private');
+        header('Pragma: no-cache');
+        header('X-Content-Type-Options: nosniff');
+        header('Referrer-Policy: no-referrer');
         header('Access-Control-Allow-Origin: *');
         header('Access-Control-Allow-Headers: Authorization, Content-Type, X-Client-Version');
         header('Access-Control-Allow-Methods: GET, POST, DELETE, OPTIONS');
