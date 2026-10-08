@@ -841,7 +841,7 @@ final class App
         $this->affiliates->reconcilePaidOrders();
         $this->render('admin/affiliates', [
             'title' => 'Afiliados e saques — Admin Caption IA',
-            'data' => $this->affiliates->adminDashboard(),
+            'affiliateReport' => $this->affiliates->adminDashboard(),
         ]);
     }
 
