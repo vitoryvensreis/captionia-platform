@@ -76,6 +76,11 @@ jobs:
 
           git fetch origin main
           git cat-file -e "$DEPLOY_SHA^{commit}"
+          CURRENT_MAIN="$(git rev-parse origin/main)"
+          if [ "$CURRENT_MAIN" != "$DEPLOY_SHA" ]; then
+            echo "Deploy ignorado: commit validado foi substituido por versao mais recente em main ($CURRENT_MAIN)."
+            exit 0
+          fi
 
           echo "== Backup do banco =="
           git show "$DEPLOY_SHA:scripts/backup-db.php" > "$TMP_BACKUP_SCRIPT"
