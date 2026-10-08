@@ -18,6 +18,18 @@
     });
   }
 
+  const affiliateCopy = document.querySelector('[data-copy-affiliate]');
+  if (affiliateCopy) {
+    affiliateCopy.addEventListener('click', async () => {
+      const field = document.getElementById('affiliate-link');
+      if (!field) return;
+      try { await navigator.clipboard.writeText(field.value); }
+      catch (_) { field.select(); document.execCommand('copy'); }
+      affiliateCopy.textContent = 'Link copiado ✓';
+      setTimeout(() => { affiliateCopy.textContent = 'Copiar link'; }, 2000);
+    });
+  }
+
   const qrTarget = document.querySelector('[data-pix-qrcode]');
   if (qrTarget && window.QRCode) {
     const payload = qrTarget.dataset.pixQrcode || '';
