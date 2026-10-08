@@ -137,6 +137,10 @@ final class App
                 $this->accountPage();
                 return;
             }
+            if ($method === 'GET' && preg_match('#^/minha-conta/baixar/([0-9A-Za-z.+-]+)$#D', $path, $match)) {
+                $this->downloadCustomerRelease($match[1]);
+                return;
+            }
 
             if ($method === 'GET' && $path === '/admin') {
                 $this->adminPage();
@@ -366,10 +370,40 @@ final class App
             'title' => 'Minha conta — Caption IA',
             'user' => $user,
             'license' => $license,
+            'release' => $this->releases->latestActive(),
+            'release_allowed' => $license && ($available = $this->releases->latestActive())
+                ? $this->licenses->versionAllowed($license, (string)$available['version'])
+                : false,
             'devices' => $devices,
             'orders' => $this->checkout->ordersForUser((int) $user['id']),
             'plans' => $this->plans(),
         ]);
+    }
+
+    /**
+     * O link de download do painel web é protegido pela sessão e pela licença,
+     * sem expor token Bearer em URL ou HTML. O ZIP fica fora de public/.
+     */
+    private function downloadCustomerRelease(string $version): void
+    {
+        $user = $this->auth->requireUser();
+        $license = $this->licenses->activeLicenseForUser((int)$user['id']);
+        $release = $this->releases->findActiveByVersion($version);
+
+        if (!$release) {
+            Json::send(['ok'=>false,'error'=>'Versão não disponível.'], 404);
+        }
+        if (!$license || !$this->licenses->versionAllowed($license, (string)$release['version'])) {
+            Json::send(['ok'=>false,'error'=>'Licença sem acesso a esta versão.'], 403);
+        }
+
+        $file = $this->releases->absolutePath($release);
+        header('Content-Type: application/zip');
+        header('Content-Length: ' . (string)filesize($file));
+        header('Content-Disposition: attachment; filename="CaptionIA-' . $release['version'] . '.zip"');
+        header('Cache-Control: private, no-store');
+        header('X-Content-Type-Options: nosniff');
+        readfile($file);
     }
 
     private function adminPage(): void
