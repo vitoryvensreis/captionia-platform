@@ -306,3 +306,31 @@ CREATE TABLE IF NOT EXISTS license_access_adjustments (
     CONSTRAINT fk_access_adjust_old_plan FOREIGN KEY (old_plan_id) REFERENCES plans(id) ON DELETE RESTRICT,
     CONSTRAINT fk_access_adjust_new_plan FOREIGN KEY (new_plan_id) REFERENCES plans(id) ON DELETE RESTRICT
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+
+-- Administrative presentation and managerial corrections; never alter receipts.
+CREATE TABLE IF NOT EXISTS order_admin_overrides (
+  order_id BIGINT UNSIGNED NOT NULL PRIMARY KEY,
+  display_amount_cents INT UNSIGNED NULL,
+  archived_at DATETIME NULL,
+  archived_reason VARCHAR(500) NULL,
+  updated_by BIGINT UNSIGNED NOT NULL,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  KEY idx_order_override_archived (archived_at),
+  CONSTRAINT fk_order_override_order FOREIGN KEY (order_id) REFERENCES checkout_orders(id) ON DELETE RESTRICT,
+  CONSTRAINT fk_order_override_actor FOREIGN KEY (updated_by) REFERENCES users(id) ON DELETE RESTRICT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS order_admin_change_log (
+  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  order_id BIGINT UNSIGNED NOT NULL,
+  admin_user_id BIGINT UNSIGNED NOT NULL,
+  action ENUM('adjust_value','reset_value','archive','restore') NOT NULL,
+  before_amount_cents INT UNSIGNED NULL,
+  after_amount_cents INT UNSIGNED NULL,
+  reason VARCHAR(500) NOT NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  KEY idx_order_change_log_order (order_id,created_at),
+  CONSTRAINT fk_order_log_order FOREIGN KEY (order_id) REFERENCES checkout_orders(id) ON DELETE RESTRICT,
+  CONSTRAINT fk_order_log_actor FOREIGN KEY (admin_user_id) REFERENCES users(id) ON DELETE RESTRICT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
