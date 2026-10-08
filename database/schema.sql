@@ -204,3 +204,81 @@ CREATE TABLE IF NOT EXISTS cloud_assets (
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   INDEX idx_cloud_assets_catalog (active,category,label)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+
+-- Affiliate/financial modules (non-destructive; feature OFF until admin enables).
+INSERT IGNORE INTO app_settings (setting_key,setting_value,updated_at) VALUES
+('affiliate_program_enabled','0',NOW()),
+('affiliate_default_percent','15',NOW()),
+('affiliate_minimum_withdrawal_cents','5000',NOW()),
+('affiliate_hold_days','14',NOW()),
+('affiliate_auto_enable_buyers','1',NOW()),
+('analytics_enabled','1',NOW());
+
+CREATE TABLE IF NOT EXISTS affiliate_profiles (
+  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  user_id BIGINT UNSIGNED NOT NULL,
+  code CHAR(16) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  enabled TINYINT(1) NOT NULL DEFAULT 1,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uq_affiliate_user (user_id),
+  UNIQUE KEY uq_affiliate_code (code),
+  KEY idx_affiliate_enabled (enabled,created_at),
+  CONSTRAINT fk_affiliate_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE RESTRICT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS affiliate_attributions (
+  order_id BIGINT UNSIGNED NOT NULL PRIMARY KEY,
+  affiliate_id BIGINT UNSIGNED NOT NULL,
+  rate_bps SMALLINT UNSIGNED NOT NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  KEY idx_attribution_affiliate (affiliate_id,created_at),
+  CONSTRAINT fk_attr_order FOREIGN KEY (order_id) REFERENCES checkout_orders(id) ON DELETE RESTRICT,
+  CONSTRAINT fk_attr_affiliate FOREIGN KEY (affiliate_id) REFERENCES affiliate_profiles(id) ON DELETE RESTRICT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS affiliate_commissions (
+  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  order_id BIGINT UNSIGNED NOT NULL,
+  affiliate_id BIGINT UNSIGNED NOT NULL,
+  amount_cents INT UNSIGNED NOT NULL,
+  status ENUM('earned','reversed') NOT NULL DEFAULT 'earned',
+  available_at DATETIME NOT NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE KEY uq_commission_order (order_id),
+  KEY idx_commission_balance (affiliate_id,status,available_at),
+  CONSTRAINT fk_comm_order FOREIGN KEY (order_id) REFERENCES checkout_orders(id) ON DELETE RESTRICT,
+  CONSTRAINT fk_comm_affiliate FOREIGN KEY (affiliate_id) REFERENCES affiliate_profiles(id) ON DELETE RESTRICT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS affiliate_withdrawals (
+  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  affiliate_id BIGINT UNSIGNED NOT NULL,
+  amount_cents INT UNSIGNED NOT NULL,
+  pix_key_ciphertext TEXT NOT NULL,
+  status ENUM('requested','paid','rejected') NOT NULL DEFAULT 'requested',
+  requested_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  resolved_at DATETIME NULL,
+  resolved_by BIGINT UNSIGNED NULL,
+  admin_note VARCHAR(500) NULL,
+  KEY idx_withdrawal_status (status,requested_at),
+  KEY idx_withdrawal_profile (affiliate_id,status),
+  CONSTRAINT fk_withdrawal_affiliate FOREIGN KEY (affiliate_id) REFERENCES affiliate_profiles(id) ON DELETE RESTRICT,
+  CONSTRAINT fk_withdrawal_admin FOREIGN KEY (resolved_by) REFERENCES users(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Events contain only whitelisted funnel stage, anonymous visit id and optional
+-- authenticated user id; never store IP, input content, Pix, CPF or full URL.
+CREATE TABLE IF NOT EXISTS site_funnel_events (
+  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  visit_id CHAR(32) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  user_id BIGINT UNSIGNED NULL,
+  event_type VARCHAR(32) NOT NULL,
+  page_key VARCHAR(30) NOT NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  KEY idx_funnel_type_date (event_type,created_at),
+  KEY idx_funnel_visit_date (visit_id,created_at),
+  KEY idx_funnel_page_date (page_key,created_at),
+  CONSTRAINT fk_funnel_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
