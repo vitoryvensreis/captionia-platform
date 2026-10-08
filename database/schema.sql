@@ -282,3 +282,27 @@ CREATE TABLE IF NOT EXISTS site_funnel_events (
   KEY idx_funnel_page_date (page_key,created_at),
   CONSTRAINT fk_funnel_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+
+-- Admin-only corrections to access after a verified payment.
+-- Historical checkout_orders and payment_transactions are never overwritten.
+CREATE TABLE IF NOT EXISTS license_access_adjustments (
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    order_id BIGINT UNSIGNED NOT NULL,
+    license_id BIGINT UNSIGNED NOT NULL,
+    admin_user_id BIGINT UNSIGNED NOT NULL,
+    old_plan_id BIGINT UNSIGNED NOT NULL,
+    new_plan_id BIGINT UNSIGNED NOT NULL,
+    old_expires_at DATETIME NULL,
+    new_expires_at DATETIME NULL,
+    reason VARCHAR(500) NOT NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    KEY idx_access_adjust_order (order_id,created_at),
+    KEY idx_access_adjust_license (license_id,created_at),
+    KEY idx_access_adjust_admin (admin_user_id,created_at),
+    CONSTRAINT fk_access_adjust_order FOREIGN KEY (order_id) REFERENCES checkout_orders(id) ON DELETE RESTRICT,
+    CONSTRAINT fk_access_adjust_license FOREIGN KEY (license_id) REFERENCES licenses(id) ON DELETE RESTRICT,
+    CONSTRAINT fk_access_adjust_admin FOREIGN KEY (admin_user_id) REFERENCES users(id) ON DELETE RESTRICT,
+    CONSTRAINT fk_access_adjust_old_plan FOREIGN KEY (old_plan_id) REFERENCES plans(id) ON DELETE RESTRICT,
+    CONSTRAINT fk_access_adjust_new_plan FOREIGN KEY (new_plan_id) REFERENCES plans(id) ON DELETE RESTRICT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

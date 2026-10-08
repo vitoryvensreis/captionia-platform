@@ -274,7 +274,11 @@
       <?php foreach ($orders as $order): ?>
         <tr>
           <td data-label="Cliente"><b><?= View::e($order['name']) ?></b><small><?= View::e($order['email']) ?></small></td>
-          <td data-label="Plano"><?= View::e($order['plan_name']) ?></td>
+          <td data-label="Plano"><?= View::e($order['plan_name']) ?>
+            <?php if (!empty($order['adjusted_access_plan'])): ?>
+              <small class="order-plan-adjusted"><i class="bi bi-arrow-left-right"></i> Acesso ajustado: <?= View::e($order['adjusted_access_plan']) ?></small>
+            <?php endif; ?>
+          </td>
           <td data-label="Gateway"><?= View::e(match($order['provider_mode'] ?? '') {
               'bacen_static_pix' => 'Pix direto',
               'hosted_checkout' => 'PagBank',
@@ -284,12 +288,15 @@
           <td data-label="Status"><span class="status status-<?= View::e($order['status']) ?>"><?= View::e($order['status']) ?></span></td>
           <td data-label="Data"><?= View::e(date('d/m/Y H:i', strtotime($order['created_at']))) ?></td>
           <td data-label="Ação">
+            <div class="action-row order-payment-actions">
+              <a class="mini-button" href="/admin/pagamentos/<?= View::e(rawurlencode($order['reference_id'])) ?>/editar">Editar acesso</a>
             <?php if (($order['provider_mode'] ?? '') === 'bacen_static_pix' && $order['status'] === 'waiting'): ?>
               <form method="post" action="/admin/pagamentos/<?= View::e($order['reference_id']) ?>/confirmar-pix" onsubmit="return confirm('Confirma que o Pix foi recebido? A licença será liberada.');">
                 <input type="hidden" name="_csrf" value="<?= View::e($csrf) ?>">
                 <button class="mini-button confirm" type="submit">Confirmar Pix</button>
               </form>
-            <?php else: ?>—<?php endif; ?>
+            <?php endif; ?>
+            </div>
           </td>
         </tr>
       <?php endforeach; ?>
