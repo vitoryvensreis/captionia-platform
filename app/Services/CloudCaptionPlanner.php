@@ -62,8 +62,7 @@ final class CloudCaptionPlanner
                 throw new InvalidArgumentException('Lista de palavras inválida ou excessiva.');
             }
             $normalized = [];
-            $previousStart = -1.0;
-            foreach ($input['words'] as $word) {
+            foreach ($input['words'] as $index => $word) {
                 if (!is_array($word) || !is_string($word['text'] ?? null)
                     || !is_numeric($word['start'] ?? null) || !is_numeric($word['end'] ?? null)) {
                     throw new InvalidArgumentException('Cada palavra precisa de texto, start e end.');
@@ -72,12 +71,20 @@ final class CloudCaptionPlanner
                 $start = (float)$word['start'];
                 $end = (float)$word['end'];
                 if ($label === '' || mb_strlen($label) > 100 || !is_finite($start) || !is_finite($end)
-                    || $start < 0 || $end <= $start || $end > 21600 || $start < $previousStart) {
-                    throw new InvalidArgumentException('Palavra ou timecode inválido.');
+                    || $start < 0 || $end <= $start || $end > 21600) {
+                    throw new InvalidArgumentException('Palavra ou timecode inválido na posição ' . ($index + 1) . '.');
                 }
-                $normalized[] = ['text'=>$label, 'start'=>$start, 'end'=>$end];
-                $previousStart = $start;
+                $normalized[] = ['text'=>$label, 'start'=>$start, 'end'=>$end, '_order'=>$index];
             }
+            // A Groq pode retornar palavras fora de ordem em trechos de fala rápida.
+            // Reordenar os pares palavra+tempo é seguro: não inventa timestamps,
+            // não apaga palavras e mantém a associação do texto com o tempo original.
+            usort($normalized, static function(array $a, array $b): int {
+                $time = $a['start'] <=> $b['start'];
+                return $time !== 0 ? $time : ($a['_order'] <=> $b['_order']);
+            });
+            foreach ($normalized as &$item) unset($item['_order']);
+            unset($item);
             if (mb_strlen(implode(' ', array_column($normalized, 'text'))) > self::MAX_TEXT) {
                 throw new InvalidArgumentException('Texto muito longo.');
             }
@@ -109,7 +116,9 @@ final class CloudCaptionPlanner
         return [
             'text'=>$label, 'lines'=>$lines,
             'start_time'=>$words[0]['start'],
-            'end_time'=>$words[count($words)-1]['end'],
+            // Sobreposição leve de palavras é permitida. Nunca encerrar a legenda
+            // antes de uma palavra anterior do mesmo bloco terminar.
+            'end_time'=>max(array_column($words, 'end')),
             'source_word_range'=>[$from, $to],
             'font_size_hint'=>min($font, max(20, (int)floor($font * min(1.0, $maxChars / max(1, mb_strlen($label)))))),
             'overflow_risk'=>$risk,
