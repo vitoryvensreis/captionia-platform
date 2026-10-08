@@ -24,11 +24,25 @@ final class View
         }
 
         extract($data, EXTR_SKIP);
-        ob_start();
-        require $viewFile;
-        $content = ob_get_clean();
 
-        require $layoutFile;
+        // Render atomically: if a view fails, do not leak partial HTML
+        // into the 500 response or nest its markup inside existing cards.
+        $initialLevel = ob_get_level();
+        try {
+            ob_start();
+            require $viewFile;
+            $content = ob_get_clean();
+
+            ob_start();
+            require $layoutFile;
+            $html = ob_get_clean();
+        } catch (\Throwable $error) {
+            while (ob_get_level() > $initialLevel) {
+                ob_end_clean();
+            }
+            throw $error;
+        }
+        echo $html;
     }
 
     public static function e(mixed $value): string
