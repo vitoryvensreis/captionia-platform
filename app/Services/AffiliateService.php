@@ -60,10 +60,14 @@ final class AffiliateService
     public static function priceCents(string $value): int
     {
         $v = trim($value);
-        if (!preg_match('/^\d{1,7}(?:[,.]\d{1,2})?$/D', $v)) {
+        if (preg_match('/^\d{1,3}(?:\.\d{3})+(?:,\d{1,2})?$/D', $v)) {
+            $v = str_replace('.', '', $v);
+            $v = str_replace(',', '.', $v);
+        } elseif (preg_match('/^\d{1,7}(?:[,.]\d{1,2})?$/D', $v)) {
+            $v = str_replace(',', '.', $v);
+        } else {
             throw new RuntimeException('Valor monetário inválido.');
         }
-        $v = str_replace(',', '.', $v);
         [$a, $b] = array_pad(explode('.', $v), 2, '0');
         return (int) $a * 100 + (int) str_pad($b, 2, '0');
     }
