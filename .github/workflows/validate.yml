@@ -37,6 +37,9 @@ jobs:
       - name: SEO and WhatsApp metadata smoke
         run: php tests/seo_metadata_test.php
 
+      - name: Affiliate admin full view regression
+        run: php tests/admin_affiliates_render_test.php
+
   financial-integration:
     runs-on: ubuntu-latest
     timeout-minutes: 12
