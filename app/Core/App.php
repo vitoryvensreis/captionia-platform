@@ -813,7 +813,7 @@ final class App
                 'features' => [
                     'caption_plan' => $enabled,
                     'edit_plan' => $enabled,
-                    'assets' => false,
+                    'assets' => $enabled && Env::bool('CAPTIONIA_CLOUD_ASSETS_ENABLED', false),
                     'cloud_transcription' => false,
                 ],
             ]);
@@ -843,6 +843,29 @@ final class App
             } catch (\InvalidArgumentException $e) {
                 Json::send(['ok'=>false,'error'=>$e->getMessage()], 422);
             }
+        }
+
+        if ($method === 'GET' && $path === '/api/v1/core/assets') {
+            $this->assertCloudAccess($context, 'asset_catalog');
+            if (!Env::bool('CAPTIONIA_CLOUD_ASSETS_ENABLED', false)) {
+                Json::send(['ok'=>false,'error'=>'Biblioteca na nuvem ainda indisponível.'], 503);
+            }
+            Json::send(['ok'=>true,'assets'=>(new \CaptionIA\Services\CloudAssetService($this->basePath))->catalog()]);
+        }
+
+        if ($method === 'GET' && preg_match('#^/api/v1/core/assets/([a-f0-9]{64})$#D', $path, $assetMatch)) {
+            $this->assertCloudAccess($context, 'asset_download');
+            if (!Env::bool('CAPTIONIA_CLOUD_ASSETS_ENABLED', false)) {
+                Json::send(['ok'=>false,'error'=>'Biblioteca na nuvem ainda indisponível.'], 503);
+            }
+            $payload = (new \CaptionIA\Services\CloudAssetService($this->basePath))->fetch($assetMatch[1]);
+            header('Content-Type: ' . $payload['mime']);
+            header('Content-Length: ' . $payload['bytes']);
+            header('Content-Disposition: attachment; filename="captionia-' . $assetMatch[1] . '"');
+            header('X-Content-Type-Options: nosniff');
+            header('Cache-Control: private, no-store');
+            echo $payload['data'];
+            exit;
         }
 
         if ($method === 'GET' && $path === '/api/v1/me') {
