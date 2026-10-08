@@ -1199,17 +1199,8 @@ final class App
                 Json::send(['ok'=>false,'error'=>'Transcrição na nuvem indisponível.'], 503);
             }
             $this->assertCloudAccess($context, 'transcribe');
-            if (($_POST['consent'] ?? '') !== 'yes') {
-                Json::send(['ok'=>false,'error'=>'Consentimento para enviar áudio é obrigatório.'], 422);
-            }
             if ((int)($_SERVER['CONTENT_LENGTH'] ?? 0) > 25000000) {
                 Json::send(['ok'=>false,'error'=>'Arquivo excede o limite do serviço.'], 413);
-            }
-            $daily = max(1,min(100,Env::int('CAPTIONIA_CLOUD_TRANSCRIPTION_DAILY_CALLS', 12)));
-            if (!(new \CaptionIA\Services\CloudRequestLimiter())->allowDaily(
-                (int)$context['user']['id'], 'groq', $daily)) {
-                header('Retry-After: 3600');
-                Json::send(['ok'=>false,'error'=>'Limite diário de transcrições atingido.'], 429);
             }
             try {
                 $result = (new \CaptionIA\Services\CloudTranscriptionService())
@@ -1389,10 +1380,14 @@ final class App
         if (!$deviceStmt->fetchColumn()) {
             Json::send(['ok'=>false,'error'=>'Dispositivo não autorizado.'], 403);
         }
-        $limit = $feature === 'transcribe' ? 2 : max(1, min(120, Env::int('CAPTIONIA_CLOUD_MAX_REQUESTS_PER_MINUTE', 30)));
-        if (!(new \CaptionIA\Services\CloudRequestLimiter())->allow((int)$context['user']['id'], $feature, $limit)) {
-            header('Retry-After: 60');
-            Json::send(['ok'=>false,'error'=>'Muitas requisições. Tente novamente em um minuto.'], 429);
+        // Transcrição não possui quota própria do Caption IA. O provedor pode aplicar
+        // limites da conta/chave upstream; os demais recursos Cloud mantêm proteção por minuto.
+        if ($feature !== 'transcribe') {
+            $limit = max(1, min(120, Env::int('CAPTIONIA_CLOUD_MAX_REQUESTS_PER_MINUTE', 30)));
+            if (!(new \CaptionIA\Services\CloudRequestLimiter())->allow((int)$context['user']['id'], $feature, $limit)) {
+                header('Retry-After: 60');
+                Json::send(['ok'=>false,'error'=>'Muitas requisições. Tente novamente em um minuto.'], 429);
+            }
         }
     }
 
