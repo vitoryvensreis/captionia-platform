@@ -90,3 +90,5 @@ jobs:
           php scripts/install.php
       - name: Exercise money-sensitive workflows
         run: php tests/affiliate_finance_integration_test.php
+      - name: Validate manual paid-order adjustments and immutable receipts
+        run: php tests/admin_order_adjustments_test.php
