@@ -40,3 +40,5 @@ foreach ([
     catch (InvalidArgumentException $expected) {}
 }
 echo "CloudCaptionPlanner: OK\n";
+
+require __DIR__ . '/cloud_asset_crypto_test.php';
