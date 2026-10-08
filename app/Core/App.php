@@ -366,13 +366,15 @@ final class App
             $devices = $stmt->fetchAll();
         }
 
+        $release = $this->releases->latestActive();
+
         $this->render('account', [
             'title' => 'Minha conta — Caption IA',
             'user' => $user,
             'license' => $license,
-            'release' => $this->releases->latestActive(),
-            'release_allowed' => $license && ($available = $this->releases->latestActive())
-                ? $this->licenses->versionAllowed($license, (string)$available['version'])
+            'release' => $release,
+            'release_allowed' => $license && $release
+                ? $this->licenses->versionAllowed($license, (string)$release['version'])
                 : false,
             'devices' => $devices,
             'orders' => $this->checkout->ordersForUser((int) $user['id']),
