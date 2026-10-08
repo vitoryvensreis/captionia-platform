@@ -9,6 +9,7 @@ use CaptionIA\Services\ApiTokenService;
 use CaptionIA\Services\AuthService;
 use CaptionIA\Services\CheckoutService;
 use CaptionIA\Services\LicenseService;
+use CaptionIA\Services\OrderAdjustmentService;
 use CaptionIA\Services\PagBankService;
 use CaptionIA\Services\PixBacenService;
 use CaptionIA\Services\ReleaseService;
@@ -28,6 +29,7 @@ final class App
     private ReleaseService $releases;
     private AffiliateService $affiliates;
     private FinanceService $finance;
+    private OrderAdjustmentService $orderAdjustments;
 
     public function __construct(private readonly string $basePath)
     {
@@ -41,6 +43,7 @@ final class App
         $this->settings = new SettingsService();
         $this->affiliates = new AffiliateService($this->settings);
         $this->finance = new FinanceService($this->settings);
+        $this->orderAdjustments = new OrderAdjustmentService();
         $this->pixBacen = new PixBacenService();
         $this->releases = new ReleaseService($basePath);
         $this->checkout = new CheckoutService(
@@ -221,6 +224,14 @@ final class App
             }
             if ($method === 'POST' && $path === '/admin/configuracoes/pagamentos') {
                 $this->adminSavePaymentSettings();
+                return;
+            }
+            if ($method === 'GET' && preg_match('#^/admin/pagamentos/([A-Z0-9-]+)/editar$#D', $path, $m)) {
+                $this->adminEditPaidOrder($m[1]);
+                return;
+            }
+            if ($method === 'POST' && preg_match('#^/admin/pagamentos/([A-Z0-9-]+)/ajustar-acesso$#D', $path, $m)) {
+                $this->adminSaveOrderAccess($m[1]);
                 return;
             }
             if ($method === 'POST' && preg_match('#^/admin/pagamentos/([A-Z0-9-]+)/confirmar-pix$#', $path, $m)) {
@@ -497,11 +508,15 @@ final class App
         )->fetchAll();
 
         $orders = $pdo->query(
-            'SELECT co.reference_id,co.status,co.provider_mode,co.amount_cents,co.created_at,co.paid_at,
-                    u.name,u.email,p.name AS plan_name
+            'SELECT co.reference_id,co.status,co.license_applied,co.provider_mode,co.amount_cents,co.created_at,co.paid_at,
+                    u.name,u.email,p.name AS plan_name,ap.name AS adjusted_access_plan
              FROM checkout_orders co
              JOIN users u ON u.id=co.user_id
              JOIN plans p ON p.id=co.plan_id
+             LEFT JOIN license_access_adjustments adj ON adj.id=(
+                 SELECT MAX(a.id) FROM license_access_adjustments a WHERE a.order_id=co.id
+             )
+             LEFT JOIN plans ap ON ap.id=adj.new_plan_id
              ORDER BY co.created_at DESC LIMIT 50'
         )->fetchAll();
 
@@ -520,6 +535,37 @@ final class App
             'paymentSettings' => $this->settings->paymentSettings(),
             'pagbankConfigured' => $this->pagBank->configured(),
         ]);
+    }
+
+    private function adminEditPaidOrder(string $reference): void
+    {
+        $this->auth->requireAdmin();
+        $orderEdit = $this->orderAdjustments->findForAdmin($reference);
+        if (!$orderEdit) throw new RuntimeException('Compra não encontrada.');
+
+        $this->render('admin/order-edit', [
+            'title' => 'Ajustar acesso do cliente — Caption IA',
+            'orderEdit' => $orderEdit,
+        ]);
+    }
+
+    private function adminSaveOrderAccess(string $reference): void
+    {
+        Csrf::validate($_POST['_csrf'] ?? null);
+        $admin = $this->auth->requireAdmin();
+        $this->orderAdjustments->changeAccess(
+            $reference,
+            (int)($_POST['license_id'] ?? 0),
+            (int)($_POST['new_plan_id'] ?? 0),
+            isset($_POST['expiry_date']) ? (string)$_POST['expiry_date'] : null,
+            (string)($_POST['reason'] ?? ''),
+            (int)$admin['id'],
+            (int)($_POST['expected_plan_id'] ?? 0),
+            isset($_POST['expected_expiry']) && $_POST['expected_expiry'] !== ''
+                ? (string)$_POST['expected_expiry'] : null
+        );
+        Session::flash('success','Acesso da licença atualizado. O recibo da compra, o valor recebido e o histórico de pagamentos foram preservados.');
+        $this->redirect('/admin/pagamentos/' . rawurlencode($reference) . '/editar');
     }
 
     private function adminSavePaymentSettings(): void
