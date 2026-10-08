@@ -83,11 +83,15 @@ $structuredData = [
   <a class="rail-item" href="/"><i class="bi bi-house"></i><b>Home</b></a>
   <a class="rail-item" href="/#recursos"><i class="bi bi-grid"></i><b>Recursos</b></a>
   <a class="rail-item" href="/#planos"><i class="bi bi-credit-card"></i><b>Planos</b></a>
+  <?php if (!empty($currentUser)): ?>
+    <a class="rail-item" href="/afiliados"><i class="bi bi-people"></i><b>Afiliados</b></a>
+  <?php endif; ?>
 
   <?php if (!empty($currentUser)): ?>
     <a class="rail-item" href="/minha-conta"><i class="bi bi-person-circle"></i><b>Conta</b></a>
     <?php if (($currentUser['role'] ?? '') === 'admin'): ?>
       <a class="rail-item" href="/admin"><i class="bi bi-gear"></i><b>Admin</b></a>
+      <a class="rail-item" href="/admin/financeiro"><i class="bi bi-bar-chart"></i><b>Financeiro</b></a>
     <?php endif; ?>
     <form method="post" action="/sair" class="rail-form">
       <input type="hidden" name="_csrf" value="<?= View::e($csrf ?? '') ?>">
@@ -107,9 +111,11 @@ $structuredData = [
   <footer class="footer">
     <strong>Caption IA</strong>
     <span>Escotilha Produtora · <?= date('Y') ?></span>
+    <a href="/privacidade" class="privacy-link">Privacidade e métricas</a>
   </footer>
 </div>
 
 <script src="/assets/app.js?v=3" defer></script>
+<script src="/assets/analytics.js?v=1" defer></script>
 </body>
 </html>
