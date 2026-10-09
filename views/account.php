@@ -62,8 +62,11 @@ $planUrl = static function (array $plan): string {
       <a class="button" href="/minha-conta/baixar/<?= View::e(rawurlencode((string)$release['version'])) ?>">
         <i class="bi bi-download"></i> Baixar Caption IA <?= View::e($release['version']) ?> para Windows
       </a>
+      <a class="button button-ghost" href="/minha-conta/baixar/<?= View::e(rawurlencode((string)$release['version'])) ?>">
+        <i class="bi bi-apple"></i> Baixar arquivos para Mac (instalação manual)
+      </a>
     </div>
-    <p class="muted">Extraia o ZIP, feche o Premiere e execute INSTALAR_CAPTION_IA.bat. A versão não assinada deverá ser homologada antes da distribuição pública.</p>
+    <p class="muted">Windows: extraia o ZIP, feche o Premiere e execute INSTALAR_CAPTION_IA.bat. Mac: extraia a pasta CaptionIA desse mesmo ZIP e copie para ~/Library/Application Support/Adobe/CEP/extensions/. Veja o tutorial. O pacote para Mac ainda não é assinado/notarizado.</p>
   <?php elseif (!empty($release) && !empty($license)): ?>
     <p>O download da versão atual não está incluído na sua licença. Consulte sua assinatura.</p>
   <?php else: ?>
