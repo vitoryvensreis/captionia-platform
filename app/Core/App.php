@@ -1161,8 +1161,19 @@ final class App
 
         $groqForUser = new \CaptionIA\Services\UserGroqService();
         if ($method === 'GET' && $path === '/api/v1/groq/status') {
-            $this->assertGroqAccess($context, false);
-            Json::send(['ok'=>true] + $groqForUser->status((int)$context['user']['id']));
+            $this->assertGroqAccess($context, true, 'status');
+            $userId = (int)$context['user']['id'];
+            $state = $groqForUser->status($userId);
+            if ($state['connected']) {
+                try {
+                    // A stored key can be revoked later; revalidate it before unlocking the plugin.
+                    $groqForUser->validate($groqForUser->keyForUser($userId));
+                } catch (\RuntimeException $e) {
+                    $denied = str_contains($e->getMessage(), 'recusou') || str_contains($e->getMessage(), 'acesso');
+                    Json::send(['ok'=>false,'connected'=>false,'error'=>$e->getMessage()], $denied ? 403 : 503);
+                }
+            }
+            Json::send(['ok'=>true] + $state);
         }
 
         // Keep old endpoint aliases for already-installed clients, but never use the shared server Groq key.
