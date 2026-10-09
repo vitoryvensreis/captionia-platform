@@ -443,13 +443,17 @@ final class App
         Csrf::validate($_POST['_csrf'] ?? null);
         $user = $this->auth->requireUser();
         $service = new \CaptionIA\Services\UserGroqService();
-        $action = (string)($_POST['action'] ?? 'save');
-        if ($action === 'remove') {
-            $service->remove((int)$user['id']);
-            Session::flash('success', 'Chave Groq removida da sua conta.');
-        } else {
-            $service->save((int)$user['id'], (string)($_POST['groq_key'] ?? ''));
-            Session::flash('success', 'Chave Groq validada e conectada à sua conta.');
+        try {
+            $action = (string)($_POST['action'] ?? 'save');
+            if ($action === 'remove') {
+                $service->remove((int)$user['id']);
+                Session::flash('success', 'Chave Groq removida da sua conta.');
+            } else {
+                $service->save((int)$user['id'], (string)($_POST['groq_key'] ?? ''));
+                Session::flash('success', 'Chave Groq validada e conectada à sua conta.');
+            }
+        } catch (\RuntimeException $e) {
+            Session::flash('error', $e->getMessage());
         }
         $this->redirect('/minha-conta#integracao-groq');
     }
