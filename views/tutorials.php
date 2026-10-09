@@ -22,7 +22,7 @@
     <div class="eyebrow">02 · macOS</div><h2>Como instalar no Mac</h2>
     <p>Para a distribuição ZIP não assinada, o método mais simples e previsível é copiar a extensão manualmente pelo Finder. Não exige executar scripts bloqueados pelo Gatekeeper.</p>
     <ol class="tutorial-steps">
-      <li>Baixe a versão para macOS disponibilizada na sua conta. Extraia o ZIP e localize a pasta <code>CaptionIA</code>. Se o pacote contiver <code>CaptionIA_Dados.zip</code>, extraia-o também.</li>
+      <li>Baixe o pacote na sua conta (o mesmo ZIP fornece a pasta para instalação manual no Mac). Extraia o ZIP e localize a pasta <code>CaptionIA</code>. Se o pacote contiver <code>CaptionIA_Dados.zip</code>, extraia-o também.</li>
       <li>Feche o Premiere Pro.</li>
       <li>No Finder, pressione <kbd>Command</kbd> + <kbd>Shift</kbd> + <kbd>G</kbd> e cole o caminho:
         <div class="tutorial-code"><code>~/Library/Application Support/Adobe/CEP/extensions/</code></div>
