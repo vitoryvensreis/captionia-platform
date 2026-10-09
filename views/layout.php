@@ -19,7 +19,7 @@ $structuredData = [
     'image' => $previewImage,
     'description' => $publicDescription,
     'applicationCategory' => 'MultimediaApplication',
-    'operatingSystem' => 'Windows',
+    'operatingSystem' => 'Windows, macOS',
     'publisher' => [
         '@type' => 'Organization',
         'name' => 'Escotilha Produtora',
@@ -83,6 +83,7 @@ $structuredData = [
   <a class="rail-item" href="/"><i class="bi bi-house"></i><b>Home</b></a>
   <a class="rail-item" href="/#recursos"><i class="bi bi-grid"></i><b>Recursos</b></a>
   <a class="rail-item" href="/#planos"><i class="bi bi-credit-card"></i><b>Planos</b></a>
+  <a class="rail-item" href="/tutoriais"><i class="bi bi-journal-play"></i><b>Tutoriais</b></a>
   <?php if (!empty($currentUser)): ?>
     <a class="rail-item" href="/afiliados"><i class="bi bi-people"></i><b>Afiliados</b></a>
   <?php endif; ?>
