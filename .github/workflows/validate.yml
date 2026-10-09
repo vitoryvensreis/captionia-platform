@@ -34,6 +34,9 @@ jobs:
         run: |
           find app public views scripts tests -type f -name '*.php' -print0 | xargs -0 -n1 php -l
 
+      - name: Cloud narrative gateway security regression
+        run: php tests/cloud_narrative_test.php
+
       - name: SEO and WhatsApp metadata smoke
         run: php tests/seo_metadata_test.php
 
