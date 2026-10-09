@@ -14,11 +14,13 @@ final class CloudTranscriptionService
 {
     private const MAX_BYTES = 24000000;
 
+    public function __construct(private readonly string $userKey = '') {}
+
     public function transcribe(array $file, string $language): array
     {
-        $key = trim((string)Env::get('GROQ_API_KEY', ''));
+        $key = trim($this->userKey);
         if (!str_starts_with($key, 'gsk_') || strlen($key) < 25) {
-            throw new RuntimeException('Transcrição na nuvem não configurada.');
+            throw new RuntimeException('Configure sua chave Groq em Minha conta no site Caption IA.');
         }
         if (!extension_loaded('curl')) {
             throw new RuntimeException('cURL indisponível.');
@@ -53,7 +55,13 @@ final class CloudTranscriptionService
         $curl = curl_init('https://api.groq.com/openai/v1/audio/transcriptions');
         if ($curl === false) throw new RuntimeException('Falha de inicialização da transcrição.');
         $body = '';
+        $rateHeaders = [];
         curl_setopt_array($curl, [
+            CURLOPT_HEADERFUNCTION => static function ($handle, string $line) use (&$rateHeaders): int {
+                $parts = explode(':', $line, 2);
+                if (count($parts) === 2) $rateHeaders[strtolower(trim($parts[0]))] = trim($parts[1]);
+                return strlen($line);
+            },
             CURLOPT_POST => true,
             CURLOPT_POSTFIELDS => $post,
             CURLOPT_HTTPHEADER => ['Authorization: Bearer ' . $key,'Accept: application/json'],
@@ -76,8 +84,9 @@ final class CloudTranscriptionService
         }
         if ($ok === false || $code < 200 || $code >= 300) {
             // Never send upstream error bodies or credentials back to plugin clients.
-            if ($code === 429) throw new RuntimeException('Provedor ocupado. Aguarde um minuto.');
-            throw new RuntimeException('Serviço de transcrição indisponível. Tente novamente.');
+            if ($code === 429) throw new GroqGatewayException('Limite de tokens Groq atingido. Aguarde e tente novamente.', 429, min(180, max(1, (int)($rateHeaders['retry-after'] ?? 30))));
+            if ($code === 401 || $code === 403) throw new GroqGatewayException('Sua chave Groq foi revogada ou não tem acesso. Atualize-a na plataforma.', 403);
+            throw new GroqGatewayException('Serviço de transcrição temporariamente indisponível.', 503);
         }
         $decoded = json_decode($body, true);
         if (!is_array($decoded)) throw new RuntimeException('Resposta de transcrição inválida.');
@@ -97,7 +106,8 @@ final class CloudTranscriptionService
             'text'=>mb_substr((string)($decoded['text'] ?? ''),0,12000),
             'language'=>(string)($decoded['language'] ?? $language),
             'provider'=>'groq',
-            'model'=>'whisper-large-v3'
+            'model'=>'whisper-large-v3',
+            'rate_limit'=>UserGroqService::safeQuota($rateHeaders)
         ];
     }
 }

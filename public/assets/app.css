@@ -227,3 +227,27 @@ body{overflow-x:hidden}
 .order-danger:hover{background:#4c1c18!important}
 .order-editor .settings-form+.settings-form{margin-top:14px}
 @media(max-width:540px){.order-financial-values{grid-template-columns:1fr}}
+
+
+/* Caption IA 3.5 — integration + tutorials */
+.groq-account-card{scroll-margin-top:36px;border-color:rgba(242,177,49,.24)}
+.groq-key-form{margin:20px 0 12px;display:grid;gap:8px}
+.groq-key-form label{font-size:13px;font-weight:700;color:#e9e9eb}
+.groq-key-inputs{display:flex;align-items:center;gap:10px}
+.groq-key-inputs input{flex:1;min-width:0;background:#18191c;border:1px solid #484951;border-radius:10px;color:#fff;padding:13px 15px;font:inherit}
+.groq-key-inputs input:focus{outline:2px solid #d69b3a;outline-offset:2px}
+.tutorial-page{max-width:1020px;margin:auto}
+.tutorial-jump{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:22px}
+.tutorial-jump a{border:1px solid #35363c;background:#1b1c20;border-radius:12px;padding:11px 14px;color:#f1f1f4;text-decoration:none;font-weight:600;font-size:13px}
+.tutorial-jump a:hover{border-color:#e6a744}
+.tutorial-page .panel{margin-bottom:18px;scroll-margin-top:32px}
+.tutorial-page h2{font-size:24px;margin:8px 0 14px}
+.tutorial-steps{padding-left:22px;display:grid;gap:14px;line-height:1.65}
+.tutorial-steps li{padding-left:5px}
+.tutorial-page code,.tutorial-page kbd{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;background:#29292f;padding:2px 5px;border-radius:5px}
+.tutorial-code{margin:12px 0;padding:14px;border:1px solid #444650;border-radius:10px;background:#17181b;overflow:auto;white-space:nowrap}
+.tutorial-code code{background:transparent;user-select:all;white-space:pre}
+.tutorial-page details{border-top:1px solid #3d3d43;padding:15px 2px;line-height:1.7}
+.tutorial-page details summary{cursor:pointer;font-weight:700}
+.tutorial-page details p{margin:10px 0}
+@media(max-width:650px){.groq-key-inputs{flex-direction:column;align-items:stretch}.groq-key-inputs .button{width:100%;justify-content:center}}

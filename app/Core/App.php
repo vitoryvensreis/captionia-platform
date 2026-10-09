@@ -192,6 +192,14 @@ final class App
                 return;
             }
 
+            if ($method === 'GET' && $path === '/tutoriais') {
+                $this->render('tutorials', ['title' => 'Tutoriais — Caption IA']);
+                return;
+            }
+            if ($method === 'POST' && $path === '/minha-conta/groq') {
+                $this->saveAccountGroq();
+                return;
+            }
             if ($method === 'GET' && $path === '/minha-conta') {
                 $this->accountPage();
                 return;
@@ -429,6 +437,27 @@ final class App
         echo $binary['body'];
     }
 
+    /** Web form: secret is only accepted through POST+CSRF and never returned to the browser. */
+    private function saveAccountGroq(): void
+    {
+        Csrf::validate($_POST['_csrf'] ?? null);
+        $user = $this->auth->requireUser();
+        $service = new \CaptionIA\Services\UserGroqService();
+        try {
+            $action = (string)($_POST['action'] ?? 'save');
+            if ($action === 'remove') {
+                $service->remove((int)$user['id']);
+                Session::flash('success', 'Chave Groq removida da sua conta.');
+            } else {
+                $service->save((int)$user['id'], (string)($_POST['groq_key'] ?? ''));
+                Session::flash('success', 'Chave Groq validada e conectada à sua conta.');
+            }
+        } catch (\RuntimeException $e) {
+            Session::flash('error', $e->getMessage());
+        }
+        $this->redirect('/minha-conta#integracao-groq');
+    }
+
     private function accountPage(): void
     {
         $user = $this->auth->requireUser();
@@ -457,6 +486,7 @@ final class App
             'orders' => $this->checkout->ordersForUser((int) $user['id']),
             'plans' => $this->plans(),
             'affiliateVisible' => $this->affiliates->enabled() && $license !== null,
+            'groq' => (new \CaptionIA\Services\UserGroqService())->status((int)$user['id']),
         ]);
     }
 
@@ -1129,6 +1159,56 @@ final class App
 
         $context = $this->apiAccessContext();
 
+        $groqForUser = new \CaptionIA\Services\UserGroqService();
+        if ($method === 'GET' && $path === '/api/v1/groq/status') {
+            $this->assertGroqAccess($context, true, 'status');
+            $userId = (int)$context['user']['id'];
+            $state = $groqForUser->status($userId);
+            if ($state['connected']) {
+                try {
+                    // A stored key can be revoked later; revalidate it before unlocking the plugin.
+                    $groqForUser->validate($groqForUser->keyForUser($userId));
+                } catch (\RuntimeException $e) {
+                    $denied = str_contains($e->getMessage(), 'recusou') || str_contains($e->getMessage(), 'acesso');
+                    Json::send(['ok'=>false,'connected'=>false,'error'=>$e->getMessage()], $denied ? 403 : 503);
+                }
+            }
+            Json::send(['ok'=>true] + $state);
+        }
+
+        // Keep old endpoint aliases for already-installed clients, but never use the shared server Groq key.
+        if ($method === 'POST' && in_array($path, ['/api/v1/groq/narrative/analyze', '/api/v1/core/narrative/analyze'], true)) {
+            $this->assertGroqAccess($context, true, 'narrative');
+            if ((int)($_SERVER['CONTENT_LENGTH'] ?? 0) > 120000) Json::send(['ok'=>false,'error'=>'Análise muito grande.'], 413);
+            try {
+                $key = $groqForUser->keyForUser((int)$context['user']['id']);
+                Json::send(['ok'=>true] + (new \CaptionIA\Services\CloudNarrativeService($key))->analyze(Json::input()));
+            } catch (\InvalidArgumentException $e) {
+                Json::send(['ok'=>false,'error'=>$e->getMessage()],422);
+            } catch (\CaptionIA\Services\GroqGatewayException $e) {
+                if ($e->retryAfter>0) header('Retry-After: '.$e->retryAfter);
+                Json::send(['ok'=>false,'error'=>$e->getMessage(),'retry_after_seconds'=>$e->retryAfter],$e->httpStatus);
+            } catch (\RuntimeException $e) {
+                Json::send(['ok'=>false,'error'=>$e->getMessage()],503);
+            }
+        }
+
+        if ($method === 'POST' && in_array($path, ['/api/v1/groq/transcription', '/api/v1/core/transcription'], true)) {
+            $this->assertGroqAccess($context, true, 'transcribe');
+            if ((int)($_SERVER['CONTENT_LENGTH'] ?? 0) > 25000000) Json::send(['ok'=>false,'error'=>'Áudio muito grande.'],413);
+            try {
+                $key = $groqForUser->keyForUser((int)$context['user']['id']);
+                Json::send(['ok'=>true] + (new \CaptionIA\Services\CloudTranscriptionService($key))->transcribe($_FILES['file'] ?? [], trim((string)($_POST['language'] ?? ''))));
+            } catch (\InvalidArgumentException $e) {
+                Json::send(['ok'=>false,'error'=>$e->getMessage()],422);
+            } catch (\CaptionIA\Services\GroqGatewayException $e) {
+                if ($e->retryAfter>0) header('Retry-After: '.$e->retryAfter);
+                Json::send(['ok'=>false,'error'=>$e->getMessage(),'retry_after_seconds'=>$e->retryAfter],$e->httpStatus);
+            } catch (\RuntimeException $e) {
+                Json::send(['ok'=>false,'error'=>$e->getMessage()],503);
+            }
+        }
+
         // Authenticated cloud capabilities: opt-in rollout, no legacy timeline changes.
         if ($method === 'GET' && $path === '/api/v1/core/config') {
             $enabled = Env::bool('CAPTIONIA_CLOUD_CORE_ENABLED', false);
@@ -1140,8 +1220,8 @@ final class App
                     'caption_plan' => $enabled,
                     'edit_plan' => $enabled,
                     'assets' => $enabled && Env::bool('CAPTIONIA_CLOUD_ASSETS_ENABLED', false),
-                    'cloud_transcription' => $enabled && Env::bool('CAPTIONIA_CLOUD_TRANSCRIPTION_ENABLED', false) && str_starts_with((string)Env::get('GROQ_API_KEY', ''), 'gsk_'),
-                    'cloud_narrative' => $enabled && Env::bool('CAPTIONIA_CLOUD_NARRATIVE_ENABLED', Env::bool('CAPTIONIA_CLOUD_TRANSCRIPTION_ENABLED', false)) && str_starts_with((string)Env::get('GROQ_API_KEY', ''), 'gsk_'),
+                    'cloud_transcription' => $groqForUser->status((int)$context['user']['id'])['connected'],
+                    'cloud_narrative' => $groqForUser->status((int)$context['user']['id'])['connected'],
                 ],
             ]);
         }
@@ -1156,29 +1236,6 @@ final class App
                 Json::send(['ok'=>true] + $result);
             } catch (\InvalidArgumentException $e) {
                 Json::send(['ok'=>false,'error'=>$e->getMessage()], 422);
-            }
-        }
-
-        if ($method === 'POST' && $path === '/api/v1/core/narrative/analyze') {
-            if (!Env::bool('CAPTIONIA_CLOUD_NARRATIVE_ENABLED', Env::bool('CAPTIONIA_CLOUD_TRANSCRIPTION_ENABLED', false))) {
-                Json::send(['ok'=>false,'error'=>'Montagem inteligente na nuvem indisponível.'], 503);
-            }
-            $this->assertCloudAccess($context, 'narrative');
-            if ((int)($_SERVER['CONTENT_LENGTH'] ?? 0) > 120000) {
-                Json::send(['ok'=>false,'error'=>'Análise editorial excede o tamanho permitido.'], 413);
-            }
-            $dailyLimit = max(1, min(500, Env::int('CAPTIONIA_CLOUD_NARRATIVE_DAILY_LIMIT', 60)));
-            if (!(new \CaptionIA\Services\CloudRequestLimiter())->allowDaily((int)$context['user']['id'], 'narrative', $dailyLimit)) {
-                header('Retry-After: 3600');
-                Json::send(['ok'=>false,'error'=>'Limite diário de análises narrativas atingido. Tente amanhã ou use sua chave Groq pessoal.'], 429);
-            }
-            try {
-                $result = (new \CaptionIA\Services\CloudNarrativeService())->analyze(Json::input());
-                Json::send(['ok'=>true] + $result);
-            } catch (\InvalidArgumentException $e) {
-                Json::send(['ok'=>false,'error'=>$e->getMessage()], 422);
-            } catch (\RuntimeException $e) {
-                Json::send(['ok'=>false,'error'=>$e->getMessage()], 503);
             }
         }
 
@@ -1216,23 +1273,6 @@ final class App
             header('Cache-Control: private, no-store');
             echo $payload['data'];
             exit;
-        }
-
-        if ($method === 'POST' && $path === '/api/v1/core/transcription') {
-            if (!Env::bool('CAPTIONIA_CLOUD_TRANSCRIPTION_ENABLED', false)) {
-                Json::send(['ok'=>false,'error'=>'Transcrição na nuvem indisponível.'], 503);
-            }
-            $this->assertCloudAccess($context, 'transcribe');
-            if ((int)($_SERVER['CONTENT_LENGTH'] ?? 0) > 25000000) {
-                Json::send(['ok'=>false,'error'=>'Arquivo excede o limite do serviço.'], 413);
-            }
-            try {
-                $result = (new \CaptionIA\Services\CloudTranscriptionService())
-                    ->transcribe($_FILES['file'] ?? [], trim((string)($_POST['language'] ?? '')));
-                Json::send(['ok'=>true] + $result);
-            } catch (\InvalidArgumentException $e) {
-                Json::send(['ok'=>false,'error'=>$e->getMessage()], 422);
-            }
         }
 
         if ($method === 'GET' && $path === '/api/v1/me') {
@@ -1411,6 +1451,27 @@ final class App
             if (!(new \CaptionIA\Services\CloudRequestLimiter())->allow((int)$context['user']['id'], $feature, $limit)) {
                 header('Retry-After: 60');
                 Json::send(['ok'=>false,'error'=>'Muitas requisições. Tente novamente em um minuto.'], 429);
+            }
+        }
+    }
+
+    /** Enforces license/device entitlement independently from optional Cloud Core features. */
+    private function assertGroqAccess(array $context, bool $metered, string $feature = ''): void
+    {
+        $license = $context['license'];
+        if (!$license || !$this->licenses->versionAllowed($license, '3.0.0')) {
+            Json::send(['ok'=>false,'error'=>'É necessária uma licença Caption IA ativa.'],403);
+        }
+        $stmt = Database::connection()->prepare(
+            'SELECT 1 FROM license_devices WHERE license_id=? AND device_uuid=? AND revoked_at IS NULL LIMIT 1'
+        );
+        $stmt->execute([(int)$license['id'], (string)$context['token']['device']]);
+        if (!$stmt->fetchColumn()) Json::send(['ok'=>false,'error'=>'Dispositivo não autorizado.'],403);
+        if ($metered) {
+            $limit = max(1,min(120, Env::int('CAPTIONIA_GROQ_BYOK_REQUESTS_PER_MINUTE',30)));
+            if (!(new \CaptionIA\Services\CloudRequestLimiter())->allow((int)$context['user']['id'], 'byok_'.$feature, $limit)) {
+                header('Retry-After: 60');
+                Json::send(['ok'=>false,'error'=>'Aguarde um minuto antes de solicitar mais análises.','retry_after_seconds'=>60],429);
             }
         }
     }

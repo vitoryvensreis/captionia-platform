@@ -67,7 +67,7 @@ $assert(str_contains($html, 'R$ 67,89'), 'Matured amount lost');
 $assert(preg_match('/Saques aguardando<\/small><b>1<\/b>/u', $html) === 1, 'Pending withdrawal count incorrect');
 $assert(str_contains($html, 'Cliente Exemplo'), 'Customer table not rendered');
 $assert(str_contains($html, 'A0B1C2D3E4F50607'), 'Affiliate code missing');
-$assert(str_contains($html, '/assets/app.css?v=7'), 'CSS cache-bust missing');
+$assert(str_contains($html, '/assets/app.css?v=8'), 'CSS cache-bust missing');
 $assert(!str_contains($html, 'Erro interno'), 'Nested 500 page in admin dashboard');
 $assert(substr_count($html, '<html') === 1, 'HTML document rendered more than once');
 $assert(str_contains($html, '</html>'), 'Incomplete HTML document');

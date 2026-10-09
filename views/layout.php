@@ -19,7 +19,7 @@ $structuredData = [
     'image' => $previewImage,
     'description' => $publicDescription,
     'applicationCategory' => 'MultimediaApplication',
-    'operatingSystem' => 'Windows',
+    'operatingSystem' => 'Windows, macOS',
     'publisher' => [
         '@type' => 'Organization',
         'name' => 'Escotilha Produtora',
@@ -59,7 +59,7 @@ $structuredData = [
 <script type="application/ld+json"><?= json_encode($structuredData, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?></script>
 <?php endif; ?>
 <link rel="stylesheet" href="/assets/icons/bootstrap-icons.min.css?v=1">
-<link rel="stylesheet" href="/assets/app.css?v=7">
+<link rel="stylesheet" href="/assets/app.css?v=8">
 </head>
 <body>
 <header class="suite-topbar">
@@ -83,6 +83,7 @@ $structuredData = [
   <a class="rail-item" href="/"><i class="bi bi-house"></i><b>Home</b></a>
   <a class="rail-item" href="/#recursos"><i class="bi bi-grid"></i><b>Recursos</b></a>
   <a class="rail-item" href="/#planos"><i class="bi bi-credit-card"></i><b>Planos</b></a>
+  <a class="rail-item" href="/tutoriais"><i class="bi bi-journal-play"></i><b>Tutoriais</b></a>
   <?php if (!empty($currentUser)): ?>
     <a class="rail-item" href="/afiliados"><i class="bi bi-people"></i><b>Afiliados</b></a>
   <?php endif; ?>

@@ -16,6 +16,8 @@ final class CloudNarrativeService
     private const MAX_INPUT_BYTES = 100000;
     private const MAX_OUTPUT_BYTES = 280000;
 
+    public function __construct(private readonly string $userKey = '') {}
+
     /** @return array<string,mixed> */
     public function prepare(array $input): array
     {
@@ -56,16 +58,22 @@ final class CloudNarrativeService
     public function analyze(array $input): array
     {
         $payload = $this->prepare($input);
-        $key = trim((string)Env::get('GROQ_API_KEY', ''));
+        $key = trim($this->userKey);
         if (!str_starts_with($key, 'gsk_') || strlen($key) < 25) {
-            throw new RuntimeException('Montagem inteligente na nuvem não configurada.');
+            throw new RuntimeException('Configure sua chave Groq em Minha conta no site Caption IA.');
         }
         if (!extension_loaded('curl')) throw new RuntimeException('cURL não disponível para análise narrativa.');
         $encoded = json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
         $ch = curl_init('https://api.groq.com/openai/v1/chat/completions');
         if ($ch === false) throw new RuntimeException('Não foi possível iniciar a análise narrativa.');
         $body = '';
+        $rateHeaders = [];
         curl_setopt_array($ch, [
+            CURLOPT_HEADERFUNCTION=>static function($handle, string $line) use (&$rateHeaders): int {
+                $parts = explode(':', $line, 2);
+                if (count($parts) === 2) $rateHeaders[strtolower(trim($parts[0]))] = trim($parts[1]);
+                return strlen($line);
+            },
             CURLOPT_POST=>true,
             CURLOPT_POSTFIELDS=>$encoded,
             CURLOPT_HTTPHEADER=>['Authorization: Bearer '.$key, 'Content-Type: application/json', 'Accept: application/json'],
@@ -88,14 +96,15 @@ final class CloudNarrativeService
         }
         // Intentionally never return raw upstream errors or the Groq credential.
         if ($ok === false || $status < 200 || $status >= 300) {
-            if ($status === 429) throw new RuntimeException('A Groq da nuvem atingiu o limite. Aguarde e tente novamente.');
-            throw new RuntimeException('A análise narrativa da nuvem não está disponível. Tente novamente.');
+            if ($status === 429) throw new GroqGatewayException('Limite de tokens da sua conta Groq atingido. Aguarde.', 429, min(180, max(1, (int)($rateHeaders['retry-after'] ?? 30))));
+            if ($status === 401 || $status === 403) throw new GroqGatewayException('Sua chave Groq foi revogada ou não tem acesso. Atualize-a na plataforma.', 403);
+            throw new GroqGatewayException('A análise narrativa não está disponível no momento.', 503);
         }
         $json = json_decode($body, true);
         $content = $json['choices'][0]['message']['content'] ?? null;
         if (!is_string($content) || strlen($content) > 180000) throw new RuntimeException('A IA não retornou uma resposta editorial válida.');
         $result = json_decode($content, true);
         if (!is_array($result) || array_is_list($result)) throw new RuntimeException('A IA não retornou um objeto JSON válido.');
-        return ['result'=>$result,'model'=>self::MODEL,'provider'=>'groq-cloud'];
+        return ['result'=>$result,'model'=>self::MODEL,'provider'=>'groq-byok', 'rate_limit'=>UserGroqService::safeQuota($rateHeaders)];
     }
 }
