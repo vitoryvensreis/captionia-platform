@@ -25,11 +25,39 @@ $planUrl = static function (array $plan): string {
   <?php endif; ?>
 </section>
 
+<section class="panel groq-account-card" id="integracao-groq" style="margin-bottom:18px">
+  <div class="panel-title-row"><div>
+    <div class="eyebrow">INTEGRAÇÕES</div>
+    <h2>Minha chave Groq</h2>
+    <p>Sua chave fica criptografada na sua conta Caption IA. Mac e Windows acessam a mesma integração após login, sem armazenar a chave no computador.</p>
+  </div><span class="status <?= !empty($groq['connected']) ? 'status-paid' : 'status-pending' ?>"><?= !empty($groq['connected']) ? 'Conectada' : 'Não configurada' ?></span></div>
+  <?php if (!empty($groq['connected'])): ?>
+    <p><i class="bi bi-shield-lock"></i> Chave cadastrada: <strong><?= View::e($groq['masked_key'] ?? '') ?></strong></p>
+    <p class="muted">Última validação: <?= View::e(!empty($groq['verified_at']) ? date('d/m/Y H:i',strtotime($groq['verified_at'])) : '—') ?>. A chave nunca é exibida novamente.</p>
+  <?php else: ?>
+    <p class="muted">Configure a Groq antes de usar Transcrição e Montagem Inteligente. Os limites de uso pertencem à sua própria conta Groq.</p>
+  <?php endif; ?>
+  <form action="/minha-conta/groq" method="post" class="groq-key-form" autocomplete="off">
+    <input type="hidden" name="_csrf" value="<?= View::e($csrf) ?>">
+    <input type="hidden" name="action" value="save">
+    <label for="groq-account-key"><?= !empty($groq['connected']) ? 'Substituir chave Groq' : 'Cadastrar chave Groq' ?></label>
+    <div class="groq-key-inputs"><input id="groq-account-key" type="password" name="groq_key" placeholder="gsk_..." minlength="25" maxlength="200" spellcheck="false" autocomplete="new-password" required><button class="button" type="submit"><i class="bi bi-shield-check"></i> Validar e salvar</button></div>
+  </form>
+  <?php if (!empty($groq['connected'])): ?>
+    <form action="/minha-conta/groq" method="post" onsubmit="return confirm('Remover a chave Groq desta conta? O plugin deixará de usar IA até uma nova chave ser cadastrada.');">
+      <input type="hidden" name="_csrf" value="<?= View::e($csrf) ?>">
+      <input type="hidden" name="action" value="remove">
+      <button class="button button-ghost" type="submit">Remover integração</button>
+    </form>
+  <?php endif; ?>
+  <p class="muted">Não compartilhe sua chave com suporte. <a href="https://console.groq.com/keys" target="_blank" rel="noopener noreferrer">Criar chave Groq ↗</a> · <a href="/tutoriais#groq">Aprenda a conectar</a></p>
+</section>
+
 <section class="panel" style="margin-bottom:18px;">
   <h2>Instalar ou atualizar o Caption IA</h2>
   <?php if (!empty($release_allowed) && !empty($release)): ?>
     <p>Versão disponível: <strong><?= View::e($release['version']) ?></strong></p>
-    <p class="muted">O instalador inclui o plugin e seus recursos. Faça login no Premiere com a mesma conta para ativar a licença. A transcrição por IA usa a GROQ na nuvem, sem chave local.</p>
+    <p class="muted">O instalador inclui o plugin e seus recursos. Faça login no Premiere com a mesma conta para ativar a licença. A transcrição e a montagem utilizam sua chave Groq vinculada à conta, sem configurar o Keychain.</p>
     <div class="account-actions">
       <a class="button" href="/minha-conta/baixar/<?= View::e(rawurlencode((string)$release['version'])) ?>">
         <i class="bi bi-download"></i> Baixar Caption IA <?= View::e($release['version']) ?> para Windows
@@ -42,6 +70,7 @@ $planUrl = static function (array $plan): string {
     <p class="muted">O instalador será disponibilizado após a publicação de uma versão autorizada.</p>
   <?php endif; ?>
 </section>
+<p class="muted" style="margin-bottom:18px">Para instalar no macOS ou Windows, consulte o <a href="/tutoriais">guia de instalação completo</a>.</p>
 
 <?php if (!empty($affiliateVisible)): ?>
 <section class="panel" style="margin-bottom:18px">
