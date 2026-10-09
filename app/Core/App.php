@@ -1141,6 +1141,7 @@ final class App
                     'edit_plan' => $enabled,
                     'assets' => $enabled && Env::bool('CAPTIONIA_CLOUD_ASSETS_ENABLED', false),
                     'cloud_transcription' => $enabled && Env::bool('CAPTIONIA_CLOUD_TRANSCRIPTION_ENABLED', false) && str_starts_with((string)Env::get('GROQ_API_KEY', ''), 'gsk_'),
+                    'cloud_narrative' => $enabled && Env::bool('CAPTIONIA_CLOUD_NARRATIVE_ENABLED', Env::bool('CAPTIONIA_CLOUD_TRANSCRIPTION_ENABLED', false)) && str_starts_with((string)Env::get('GROQ_API_KEY', ''), 'gsk_'),
                 ],
             ]);
         }
@@ -1155,6 +1156,29 @@ final class App
                 Json::send(['ok'=>true] + $result);
             } catch (\InvalidArgumentException $e) {
                 Json::send(['ok'=>false,'error'=>$e->getMessage()], 422);
+            }
+        }
+
+        if ($method === 'POST' && $path === '/api/v1/core/narrative/analyze') {
+            if (!Env::bool('CAPTIONIA_CLOUD_NARRATIVE_ENABLED', Env::bool('CAPTIONIA_CLOUD_TRANSCRIPTION_ENABLED', false))) {
+                Json::send(['ok'=>false,'error'=>'Montagem inteligente na nuvem indisponível.'], 503);
+            }
+            $this->assertCloudAccess($context, 'narrative');
+            if ((int)($_SERVER['CONTENT_LENGTH'] ?? 0) > 120000) {
+                Json::send(['ok'=>false,'error'=>'Análise editorial excede o tamanho permitido.'], 413);
+            }
+            $dailyLimit = max(1, min(500, Env::int('CAPTIONIA_CLOUD_NARRATIVE_DAILY_LIMIT', 60)));
+            if (!(new \\CaptionIA\\Services\\CloudRequestLimiter())->allowDaily((int)$context['user']['id'], 'narrative', $dailyLimit)) {
+                header('Retry-After: 3600');
+                Json::send(['ok'=>false,'error'=>'Limite diário de análises narrativas atingido. Tente amanhã ou use sua chave Groq pessoal.'], 429);
+            }
+            try {
+                $result = (new \\CaptionIA\\Services\\CloudNarrativeService())->analyze(Json::input());
+                Json::send(['ok'=>true] + $result);
+            } catch (\\InvalidArgumentException $e) {
+                Json::send(['ok'=>false,'error'=>$e->getMessage()], 422);
+            } catch (\\RuntimeException $e) {
+                Json::send(['ok'=>false,'error'=>$e->getMessage()], 503);
             }
         }
 
