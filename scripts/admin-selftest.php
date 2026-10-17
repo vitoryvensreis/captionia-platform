@@ -43,6 +43,10 @@ $requiredColumns = [
     ['checkout_orders', 'provider_mode'],
     ['checkout_orders', 'pagbank_checkout_id'],
     ['checkout_orders', 'hosted_checkout_url'],
+    ['users', 'asaas_customer_id'],
+    ['checkout_orders', 'asaas_customer_id'],
+    ['checkout_orders', 'asaas_subscription_id'],
+    ['checkout_orders', 'asaas_payment_id'],
     ['plans', 'description'],
     ['plans', 'featured'],
     ['plans', 'sort_order'],
@@ -67,7 +71,7 @@ $settingStmt = $pdo->prepare("SELECT setting_value FROM app_settings WHERE setti
 $settingStmt->execute();
 $paymentGateway = (string) ($settingStmt->fetchColumn() ?: '');
 
-if (!in_array($paymentGateway, ['pagbank', 'bacen_pix'], true)) {
+if (!in_array($paymentGateway, ['pagbank', 'bacen_pix', 'asaas'], true)) {
     fwrite(STDERR, "payment_gateway inválido ou ausente." . PHP_EOL);
     exit(1);
 }
