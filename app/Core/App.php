@@ -212,6 +212,10 @@ final class App
                 $this->saveAccountGroq();
                 return;
             }
+            if ($method === 'POST' && preg_match('#^/minha-conta/assinaturas/([A-Za-z0-9_-]{8,190})/cancelar$#D', $path, $m)) {
+                $this->cancelMyAsaasSubscription($m[1]);
+                return;
+            }
             if ($method === 'GET' && $path === '/minha-conta') {
                 $this->accountPage();
                 return;
@@ -474,6 +478,15 @@ final class App
         $this->redirect('/minha-conta#integracao-groq');
     }
 
+    private function cancelMyAsaasSubscription(string $subscriptionId): void
+    {
+        Csrf::validate($_POST['_csrf'] ?? null);
+        $user = $this->auth->requireUser();
+        $this->asaasCheckout->cancelSubscriptionForUser((int) $user['id'], $subscriptionId);
+        Session::flash('success', 'Assinatura cancelada. Novas cobranças interrompidas; seu acesso pago continua até a data de validade.');
+        $this->redirect('/minha-conta');
+    }
+
     private function accountPage(): void
     {
         $user = $this->auth->requireUser();
@@ -500,6 +513,7 @@ final class App
                 : false,
             'devices' => $devices,
             'orders' => $this->checkout->ordersForUser((int) $user['id']),
+            'asaasSubscriptions' => $this->asaasCheckout->subscriptionsForUser((int) $user['id']),
             'plans' => $this->plans(),
             'affiliateVisible' => $this->affiliates->enabled() && $license !== null,
             'groq' => (new \CaptionIA\Services\UserGroqService())->status((int)$user['id']),
