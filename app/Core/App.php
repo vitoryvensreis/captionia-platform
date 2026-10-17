@@ -4,6 +4,8 @@ declare(strict_types=1);
 namespace CaptionIA\Core;
 
 use CaptionIA\Services\AffiliateService;
+use CaptionIA\Services\AsaasService;
+use CaptionIA\Services\AsaasCheckoutService;
 use CaptionIA\Services\FinanceService;
 use CaptionIA\Services\ApiTokenService;
 use CaptionIA\Services\AuthService;
@@ -23,6 +25,8 @@ final class App
     private AuthService $auth;
     private LicenseService $licenses;
     private PagBankService $pagBank;
+    private AsaasService $asaas;
+    private AsaasCheckoutService $asaasCheckout;
     private CheckoutService $checkout;
     private ApiTokenService $tokens;
     private SettingsService $settings;
@@ -42,6 +46,8 @@ final class App
         $this->auth = new AuthService();
         $this->licenses = new LicenseService();
         $this->pagBank = new PagBankService($basePath);
+        $this->asaas = new AsaasService();
+        $this->asaasCheckout = new AsaasCheckoutService($this->asaas, $this->licenses);
         $this->settings = new SettingsService();
         $this->affiliates = new AffiliateService($this->settings);
         $this->finance = new FinanceService($this->settings);
@@ -54,7 +60,8 @@ final class App
             $this->pagBank,
             $this->licenses,
             $this->settings,
-            $this->pixBacen
+            $this->pixBacen,
+            $this->asaasCheckout
         );
         $this->tokens = new ApiTokenService();
     }
@@ -83,11 +90,16 @@ final class App
                     'app' => 'Caption IA Platform',
                     'time' => date(DATE_ATOM),
                     'pagbank_configured' => $this->pagBank->configured(),
+                    'asaas_configured' => $this->asaas->configured(),
                     'pagbank_checkout_mode' => $this->pagBank->checkoutMode(),
                     'payment_gateway' => $this->settings->paymentGateway(),
                 ]);
             }
 
+            if ($method === 'POST' && $path === '/webhooks/asaas') {
+                $this->asaasWebhook();
+                return;
+            }
             if ($method === 'POST' && $path === '/webhooks/pagbank') {
                 $this->pagBankWebhook();
                 return;
@@ -367,6 +379,7 @@ final class App
             'plan' => $plan,
             'slug' => $slug,
             'pagbankConfigured' => $this->pagBank->configured(),
+            'asaasConfigured' => $this->asaas->configured(),
             'paymentGateway' => $this->settings->paymentGateway(),
         ]);
     }
@@ -387,7 +400,7 @@ final class App
         }
 
         if (
-            ($order['provider_mode'] ?? '') === 'hosted_checkout'
+            in_array(($order['provider_mode'] ?? ''), ['hosted_checkout', 'asaas_payment', 'asaas_subscription'], true)
             && !empty($order['hosted_checkout_url'])
         ) {
             $this->redirectExternal((string) $order['hosted_checkout_url']);
@@ -574,6 +587,7 @@ final class App
             'releases' => $this->releases->listAll(),
             'paymentSettings' => $this->settings->paymentSettings(),
             'pagbankConfigured' => $this->pagBank->configured(),
+            'asaasConfigured' => $this->asaas->configured(),
         ]);
     }
 
@@ -643,6 +657,9 @@ final class App
         Csrf::validate($_POST['_csrf'] ?? null);
         $this->auth->requireAdmin();
 
+        if (($_POST['gateway'] ?? '') === 'asaas' && !$this->asaas->configured()) {
+            throw new RuntimeException('Configure ASAAS_API_KEY e ASAAS_WEBHOOK_TOKEN no .env antes de ativar.');
+        }
         $this->settings->savePaymentSettings(
             (string) ($_POST['gateway'] ?? ''),
             (string) ($_POST['pix_key'] ?? ''),
@@ -1039,6 +1056,30 @@ final class App
             ],';');
         }
         fclose($stream);
+    }
+
+    private function asaasWebhook(): void
+    {
+        $raw = file_get_contents('php://input') ?: '';
+        $token = (string) ($_SERVER['HTTP_ASAAS_ACCESS_TOKEN'] ?? '');
+        if (!$this->asaas->verifyWebhook($token)) {
+            Json::send(['ok' => false, 'error' => 'Token Asaas inválido.'], 401);
+            return;
+        }
+        try {
+            $result = $this->asaasCheckout->processWebhook($raw, $token);
+            if (($result['order']['status'] ?? '') === 'paid') {
+                try {
+                    $this->affiliates->creditPaidOrder($result['order']);
+                } catch (Throwable $error) {
+                    error_log('[CaptionIA Asaas affiliates] reconcile: ' . $error->getMessage());
+                }
+            }
+            Json::send(['ok' => true, 'duplicate' => $result['duplicate'] ?? false]);
+        } catch (Throwable $e) {
+            error_log('[CaptionIA Asaas webhook] ' . $e->getMessage());
+            Json::send(['ok' => false, 'error' => 'Processamento pendente.'], 503);
+        }
     }
 
     private function pagBankWebhook(): void
