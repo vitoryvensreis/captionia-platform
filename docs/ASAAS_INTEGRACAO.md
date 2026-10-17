@@ -10,7 +10,7 @@ Pix direto e PagBank permanecem disponíveis. Os pedidos antigos não são migra
 
 1. Crie uma conta **Asaas Sandbox** e sua própria API Key de sandbox. Nunca use a
    chave de produção para testes.
-2. No \`.env\` da VPS, fora do Git, configure:
+2. No `.env\` da VPS, fora do Git, configure:
 
    \`\`\`dotenv
    ASAAS_ENV=sandbox
@@ -37,6 +37,8 @@ Pix direto e PagBank permanecem disponíveis. Os pedidos antigos não são migra
 - **Vitalício:** cobrança avulsa no Asaas com checkout hospedado.
 - **Mensal/anual:** assinatura Asaas, cobrança inicial e novas cobranças
   conforme o ciclo. A plataforma vincula cada pagamento a um pedido próprio.
+- **Cancelamento:** em Minha conta > Minhas assinaturas Asaas, o usuário pode encerrar a recorrência com confirmação e CSRF. O servidor cancela a assinatura no Asaas e registra a operação, sem extinguir o período já pago.
+- Configure também o webhook SUBSCRIPTION_DELETED para refletir cancelamentos feitos diretamente no Asaas.
 - O cliente paga na página hospedada do Asaas. Nenhum dado do cartão é recebido
   pelo Caption IA.
 - Quando o Asaas enviar um webhook autenticado, o servidor consulta a cobrança
