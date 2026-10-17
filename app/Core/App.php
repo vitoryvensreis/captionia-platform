@@ -435,6 +435,9 @@ final class App
             'status' => $order['status'],
             'paid' => $order['status'] === 'paid',
             'redirect' => $order['status'] === 'paid' ? '/minha-conta' : null,
+            'payment_url' => str_starts_with((string) ($order['provider_mode'] ?? ''), 'asaas_')
+                && \CaptionIA\Services\AsaasService::validInvoiceUrl((string) ($order['hosted_checkout_url'] ?? ''))
+                ? (string) $order['hosted_checkout_url'] : null,
         ]);
     }
 
@@ -1666,7 +1669,9 @@ final class App
         $host = strtolower((string) ($parts['host'] ?? ''));
         $allowed = ($parts['scheme'] ?? '') === 'https'
             && (
-                $host === 'pagbank.com.br'
+                $host === 'asaas.com'
+                || str_ends_with($host, '.asaas.com')
+                || $host === 'pagbank.com.br'
                 || str_ends_with($host, '.pagbank.com.br')
                 || $host === 'pagseguro.com.br'
                 || str_ends_with($host, '.pagseguro.com.br')
