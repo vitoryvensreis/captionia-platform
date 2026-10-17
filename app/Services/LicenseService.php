@@ -142,7 +142,8 @@ final class LicenseService
                      (user_id,plan_id,provider,provider_subscription_id,status,current_period_end,created_at,updated_at)
                      VALUES (?,?,?,?,\'active\',?,NOW(),NOW())
                      ON DUPLICATE KEY UPDATE
-                     status=\'active\',current_period_end=VALUES(current_period_end),updated_at=NOW()'
+                     status=IF(status=\'cancelled\',\'cancelled\',\'active\'),
+                     current_period_end=VALUES(current_period_end),updated_at=NOW()'
                 )->execute([$userId, $planId, $provider, $providerId, $newExpiry]);
             }
 
