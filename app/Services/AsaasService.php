@@ -102,6 +102,14 @@ final class AsaasService
         return is_array($result['data'] ?? null) ? $result['data'] : [];
     }
 
+    public function cancelSubscription(string $subscriptionId): void
+    {
+        $result = $this->request('DELETE', '/subscriptions/' . rawurlencode($subscriptionId));
+        if (($result['deleted'] ?? false) !== true) {
+            throw new RuntimeException('Asaas não confirmou o cancelamento da assinatura.');
+        }
+    }
+
     public function payment(string $paymentId): array
     {
         return $this->request('GET', '/payments/' . rawurlencode($paymentId));
