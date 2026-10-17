@@ -163,9 +163,13 @@ final class AsaasCheckoutService
                 // Never trust a webhook's declared amount or state in isolation.
                 $remote = $this->asaas->payment($paymentId);
                 if (!AsaasService::isPaymentSettled($remote)) {
-                    throw new RuntimeException('Cobrança ainda não foi confirmada na API Asaas.');
+                    if ($eventName === 'PAYMENT_RECEIVED') {
+                        throw new RuntimeException('Pagamento marcado como recebido no evento, mas ainda não na API Asaas.');
+                    }
+                    // Confirmed PIX/boleto can still be provisional: wait for PAYMENT_RECEIVED.
+                } else {
+                    $order = $this->applyVerifiedPayment($remote);
                 }
-                $order = $this->applyVerifiedPayment($remote);
             } elseif ($eventName === 'PAYMENT_CREATED') {
                 // No access until the payment is actually settled.
                 $this->identifyPayment($event['payment'] ?? [], false);
