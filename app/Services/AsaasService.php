@@ -114,7 +114,11 @@ final class AsaasService
 
     public static function isPaymentSettled(array $payment): bool
     {
-        return in_array(strtoupper((string) ($payment['status'] ?? '')), ['CONFIRMED', 'RECEIVED'], true);
+        $status = strtoupper((string) ($payment['status'] ?? ''));
+        $type = strtoupper((string) ($payment['billingType'] ?? ''));
+        // Pix may be CONFIRMED during a precautionary hold. Wait for RECEIVED.
+        return $status === 'RECEIVED'
+            || ($status === 'CONFIRMED' && $type === 'CREDIT_CARD');
     }
 
     public static function validInvoiceUrl(string $url): bool
