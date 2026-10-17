@@ -40,6 +40,9 @@ jobs:
       - name: Cloud narrative gateway security regression
         run: php tests/cloud_narrative_test.php
 
+      - name: Asaas payment gateway security guards
+        run: php tests/asaas_gateway_test.php
+
       - name: SEO and WhatsApp metadata smoke
         run: php tests/seo_metadata_test.php
 
