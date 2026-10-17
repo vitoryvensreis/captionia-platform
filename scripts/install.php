@@ -46,6 +46,9 @@ try {
     if (!columnExists($pdo, 'users', 'cpf')) {
         $pdo->exec("ALTER TABLE users ADD COLUMN cpf VARCHAR(14) NULL AFTER email");
     }
+    if (!columnExists($pdo, 'users', 'asaas_customer_id')) {
+        $pdo->exec('ALTER TABLE users ADD COLUMN asaas_customer_id VARCHAR(190) NULL UNIQUE');
+    }
     if (!columnExists($pdo, 'users', 'phone')) {
         $pdo->exec("ALTER TABLE users ADD COLUMN phone VARCHAR(20) NULL AFTER cpf");
     }
@@ -78,6 +81,16 @@ try {
         $pdo->exec("ALTER TABLE releases ADD COLUMN notes TEXT NULL AFTER file_size");
     }
 
+    if (!columnExists($pdo, 'checkout_orders', 'asaas_customer_id')) {
+        $pdo->exec('ALTER TABLE checkout_orders ADD COLUMN asaas_customer_id VARCHAR(190) NULL');
+    }
+    if (!columnExists($pdo, 'checkout_orders', 'asaas_subscription_id')) {
+        $pdo->exec('ALTER TABLE checkout_orders ADD COLUMN asaas_subscription_id VARCHAR(190) NULL');
+        $pdo->exec('CREATE INDEX idx_checkout_asaas_subscription ON checkout_orders (asaas_subscription_id)');
+    }
+    if (!columnExists($pdo, 'checkout_orders', 'asaas_payment_id')) {
+        $pdo->exec('ALTER TABLE checkout_orders ADD COLUMN asaas_payment_id VARCHAR(190) NULL UNIQUE');
+    }
     if (!columnExists($pdo, 'checkout_orders', 'provider_mode')) {
         $pdo->exec("ALTER TABLE checkout_orders ADD COLUMN provider_mode VARCHAR(32) NOT NULL DEFAULT 'transparent_pix' AFTER amount_cents");
     }
