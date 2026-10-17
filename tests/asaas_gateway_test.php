@@ -25,9 +25,10 @@ $assert(!$asaas->verifyWebhook(''), 'Empty webhook token accepted.');
 foreach (['PENDING', 'OVERDUE', 'REFUNDED', 'CHARGEBACK_REQUESTED', 'AWAITING_RISK_ANALYSIS'] as $status) {
     $assert(!AsaasService::isPaymentSettled(['status' => $status]), 'Unpaid charge accepted: ' . $status);
 }
-foreach (['CONFIRMED', 'RECEIVED'] as $status) {
-    $assert(AsaasService::isPaymentSettled(['status' => $status]), 'Paid status rejected: ' . $status);
-}
+$assert(AsaasService::isPaymentSettled(['status' => 'RECEIVED', 'billingType' => 'PIX']), 'Received PIX rejected.');
+$assert(AsaasService::isPaymentSettled(['status' => 'CONFIRMED', 'billingType' => 'CREDIT_CARD']), 'Confirmed card rejected.');
+$assert(!AsaasService::isPaymentSettled(['status' => 'CONFIRMED', 'billingType' => 'PIX']), 'Provisional PIX confirmation accepted.');
+$assert(!AsaasService::isPaymentSettled(['status' => 'CONFIRMED', 'billingType' => 'BOLETO']), 'Provisional boleto confirmation accepted.');
 
 $assert(AsaasService::validInvoiceUrl('https://www.asaas.com/i/abc'), 'Legitimate invoice URL rejected.');
 foreach ([
