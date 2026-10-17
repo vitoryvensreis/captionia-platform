@@ -24,9 +24,9 @@
 
 <section class="panel payment-settings-panel">
   <div class="panel-title-row">
-    <div><h2>Forma de pagamento</h2><p>Troque entre PagBank hospedado e Pix direto sem alterar o site.</p></div>
+    <div><h2>Forma de pagamento</h2><p>Selecione Asaas, PagBank ou Pix direto sem alterar os pedidos anteriores.</p></div>
     <span class="status <?= ($paymentSettings['gateway'] ?? '') === 'pagbank' ? 'status-paid' : 'status-waiting' ?>">
-      <?= ($paymentSettings['gateway'] ?? '') === 'pagbank' ? 'PagBank' : 'Pix direto' ?>
+      <?= match (($paymentSettings['gateway'] ?? '')) { 'asaas' => 'Asaas', 'pagbank' => 'PagBank', default => 'Pix direto' } ?>
     </span>
   </div>
 
@@ -37,6 +37,7 @@
       <select name="gateway">
         <option value="bacen_pix" <?= ($paymentSettings['gateway'] ?? '') === 'bacen_pix' ? 'selected' : '' ?>>Pix direto · BR Code</option>
         <option value="pagbank" <?= ($paymentSettings['gateway'] ?? '') === 'pagbank' ? 'selected' : '' ?>>Checkout PagBank hospedado</option>
+        <option value="asaas" <?= ($paymentSettings['gateway'] ?? '') === 'asaas' ? 'selected' : '' ?>>Asaas · Pix, cartão, boleto e assinaturas</option>
       </select>
     </label>
 
@@ -56,7 +57,9 @@
     <div class="settings-help">
       <b>Pix direto:</b> o site gera o BR Code e o QR Code localmente. A confirmação do recebimento é manual pelo Admin.
       <br><b>PagBank:</b> o cliente é redirecionado ao checkout hospedado e a confirmação ocorre por webhook.
+      <br><b>Asaas:</b> cobrança hospedada, recorrência mensal/anual e liberação automática por webhook autenticado, após conferência na API.
       <?php if (!$pagbankConfigured): ?><br><span class="danger-text">O token PagBank não está configurado.</span><?php endif; ?>
+      <?php if (empty($asaasConfigured)): ?><br><span class="danger-text">Asaas ainda não configurado: defina ASAAS_API_KEY e ASAAS_WEBHOOK_TOKEN no .env.</span><?php endif; ?>
     </div>
 
     <button class="button" type="submit">Salvar forma de pagamento</button>
@@ -282,6 +285,7 @@
           <td data-label="Gateway"><?= View::e(match($order['provider_mode'] ?? '') {
               'bacen_static_pix' => 'Pix direto',
               'hosted_checkout' => 'PagBank',
+              'asaas_payment', 'asaas_subscription' => 'Asaas',
               default => 'PagBank PIX'
           }) ?></td>
           <td data-label="Valor">

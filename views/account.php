@@ -126,6 +126,25 @@ $planUrl = static function (array $plan): string {
   </section>
 </div>
 
+<?php if (!empty($asaasSubscriptions)): ?>
+<section class="panel" style="margin-bottom:18px">
+  <h2>Minhas assinaturas Asaas</h2>
+  <p class="muted">Você pode interromper novas cobranças quando quiser. O período já pago continua válido até o vencimento da licença.</p>
+  <?php foreach ($asaasSubscriptions as $subscription): ?>
+    <div class="account-actions" style="justify-content:space-between;align-items:center;gap:12px;margin:12px 0">
+      <div>
+        <strong><?= View::e($subscription['plan_name']) ?></strong>
+        <div class="muted"><?= $subscription['status'] === 'pending' ? 'Aguardando primeiro pagamento' : 'Recorrência ativa' ?></div>
+      </div>
+      <form method="post" action="/minha-conta/assinaturas/<?= View::e(rawurlencode((string) $subscription['provider_subscription_id'])) ?>/cancelar" onsubmit="return confirm('Cancelar a assinatura e impedir novas cobranças futuras? O acesso pago atual continua até o vencimento.');">
+        <input type="hidden" name="_csrf" value="<?= View::e($csrf) ?>">
+        <button type="submit" class="button button-ghost">Cancelar assinatura</button>
+      </form>
+    </div>
+  <?php endforeach; ?>
+</section>
+<?php endif; ?>
+
 <section class="panel orders-panel">
   <h2>Pagamentos</h2>
   <?php if (!$orders): ?>
