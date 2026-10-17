@@ -29,7 +29,7 @@ final class AsaasService
 
     public function configured(): bool
     {
-        return $this->apiKey !== '' && trim(Env::get('ASAAS_WEBHOOK_TOKEN', '') ?: '') !== '';
+        return $this->apiKey !== '' && strlen(trim(Env::get('ASAAS_WEBHOOK_TOKEN', '') ?: '')) >= 32;
     }
 
     public function verifyWebhook(string $token): bool
