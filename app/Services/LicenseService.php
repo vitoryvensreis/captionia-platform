@@ -129,14 +129,21 @@ final class LicenseService
                     ]);
                 }
 
-                $providerId = 'PIX-' . $userId . '-' . $planId;
+                $provider = str_starts_with((string) ($fresh['provider_mode'] ?? ''), 'asaas_')
+                    ? 'asaas' : 'pagbank-pix';
+                $providerId = $provider === 'asaas'
+                    ? (string) $fresh['asaas_subscription_id']
+                    : 'PIX-' . $userId . '-' . $planId;
+                if ($providerId === '') {
+                    throw new RuntimeException('Identificador da assinatura Asaas ausente.');
+                }
                 $pdo->prepare(
                     'INSERT INTO subscriptions
                      (user_id,plan_id,provider,provider_subscription_id,status,current_period_end,created_at,updated_at)
-                     VALUES (?,?,\'pagbank-pix\',?,\'active\',?,NOW(),NOW())
+                     VALUES (?,?,?,?,\'active\',?,NOW(),NOW())
                      ON DUPLICATE KEY UPDATE
                      status=\'active\',current_period_end=VALUES(current_period_end),updated_at=NOW()'
-                )->execute([$userId, $planId, $providerId, $newExpiry]);
+                )->execute([$userId, $planId, $provider, $providerId, $newExpiry]);
             }
 
             $pdo->prepare(
