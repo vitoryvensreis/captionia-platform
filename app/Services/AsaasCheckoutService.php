@@ -65,6 +65,11 @@ final class AsaasCheckoutService
                      SET asaas_subscription_id=?,status="waiting",raw_response_json=?,updated_at=NOW()
                      WHERE id=?'
                 )->execute([$subscriptionId, json_encode($subscription, JSON_THROW_ON_ERROR), $orderId]);
+                $pdo->prepare(
+                    'INSERT INTO subscriptions
+                     (user_id,plan_id,provider,provider_subscription_id,status,created_at,updated_at)
+                     VALUES (?, ?, "asaas", ?, "pending", NOW(), NOW())'
+                )->execute([$user['id'], $plan['id'], $subscriptionId]);
                 // Asaas may generate the first charge asynchronously.
                 try {
                     $this->discoverFirstSubscriptionPayment($orderId, $subscriptionId);
@@ -170,6 +175,14 @@ final class AsaasCheckoutService
                 } else {
                     $order = $this->applyVerifiedPayment($remote);
                 }
+            } elseif ($eventName === 'SUBSCRIPTION_DELETED') {
+                $subscriptionId = (string) ($event['subscription']['id'] ?? '');
+                if ($subscriptionId !== '') {
+                    $pdo->prepare(
+                        'UPDATE subscriptions SET status="cancelled",updated_at=NOW()
+                         WHERE provider="asaas" AND provider_subscription_id=?'
+                    )->execute([$subscriptionId]);
+                }
             } elseif ($eventName === 'PAYMENT_CREATED') {
                 // No access until the payment is actually settled.
                 $this->identifyPayment($event['payment'] ?? [], false);
@@ -197,6 +210,50 @@ final class AsaasCheckoutService
             )->execute([mb_substr($e->getMessage(), 0, 500), $hash]);
             throw $e;
         }
+    }
+
+    public function subscriptionsForUser(int $userId): array
+    {
+        $stmt = Database::connection()->prepare(
+            'SELECT s.provider_subscription_id,s.status,p.name AS plan_name,s.current_period_end
+             FROM subscriptions s JOIN plans p ON p.id=s.plan_id
+             WHERE s.user_id=? AND s.provider="asaas" AND s.status!="cancelled"
+             ORDER BY s.created_at DESC'
+        );
+        $stmt->execute([$userId]);
+        return $stmt->fetchAll();
+    }
+
+    public function cancelSubscriptionForUser(int $userId, string $subscriptionId): void
+    {
+        if (!preg_match('/^[a-zA-Z0-9_-]{8,190}$/', $subscriptionId)) {
+            throw new RuntimeException('Assinatura inválida.');
+        }
+        $pdo = Database::connection();
+        $find = $pdo->prepare(
+            'SELECT id,status FROM subscriptions
+             WHERE user_id=? AND provider="asaas" AND provider_subscription_id=? LIMIT 1'
+        );
+        $find->execute([$userId, $subscriptionId]);
+        $record = $find->fetch();
+        if (!$record) {
+            throw new RuntimeException('Assinatura não encontrada para sua conta.');
+        }
+        if ($record['status'] === 'cancelled') {
+            return;
+        }
+        $this->asaas->cancelSubscription($subscriptionId);
+        $pdo->prepare(
+            'UPDATE subscriptions SET status="cancelled",updated_at=NOW() WHERE id=?'
+        )->execute([$record['id']]);
+        $pdo->prepare(
+            'UPDATE checkout_orders SET status="cancelled",updated_at=NOW()
+             WHERE user_id=? AND asaas_subscription_id=? AND status IN ("creating","waiting")'
+        )->execute([$userId, $subscriptionId]);
+        $pdo->prepare(
+            'INSERT INTO audit_logs (user_id,event_type,metadata_json,created_at)
+             VALUES (?,"subscription.asaas_cancelled",?,NOW())'
+        )->execute([$userId, json_encode(['subscription_id' => $subscriptionId], JSON_THROW_ON_ERROR)]);
     }
 
     /** Only server-verified CONFIRMED or RECEIVED charges can activate licenses. */
