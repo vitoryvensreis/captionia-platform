@@ -50,6 +50,9 @@ $requiredColumns = [
     ['releases', 'sha256'],
     ['releases', 'file_size'],
     ['releases', 'notes'],
+    ['release_installers', 'sha256'],
+    ['release_installers', 'file_size'],
+    ['release_installers', 'active'],
 ];
 
 foreach ($requiredColumns as [$table, $column]) {
