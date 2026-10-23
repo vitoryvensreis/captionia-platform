@@ -182,6 +182,19 @@ CREATE TABLE IF NOT EXISTS releases (
     active TINYINT(1) NOT NULL DEFAULT 1
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- Windows installers are intentionally separate from the ZIP updater releases.
+CREATE TABLE IF NOT EXISTS release_installers (
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    version VARCHAR(30) NOT NULL UNIQUE,
+    major_version INT UNSIGNED NOT NULL,
+    file_path VARCHAR(255) NOT NULL,
+    sha256 CHAR(64) NOT NULL,
+    file_size BIGINT UNSIGNED NOT NULL,
+    notes TEXT NULL,
+    published_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    active TINYINT(1) NOT NULL DEFAULT 1
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 CREATE TABLE IF NOT EXISTS audit_logs (
     id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     user_id BIGINT UNSIGNED NULL,
