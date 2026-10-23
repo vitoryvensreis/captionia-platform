@@ -19,6 +19,7 @@ $requiredTables = [
     'payment_transactions',
     'webhook_events',
     'app_settings',
+    'release_installers',
 ];
 
 $missing = [];
