@@ -14,6 +14,7 @@ use CaptionIA\Services\SaleManagementService;
 use CaptionIA\Services\PagBankService;
 use CaptionIA\Services\PixBacenService;
 use CaptionIA\Services\ReleaseService;
+use CaptionIA\Services\InstallerService;
 use CaptionIA\Services\SettingsService;
 use RuntimeException;
 use Throwable;
@@ -28,6 +29,7 @@ final class App
     private SettingsService $settings;
     private PixBacenService $pixBacen;
     private ReleaseService $releases;
+    private InstallerService $installers;
     private AffiliateService $affiliates;
     private FinanceService $finance;
     private OrderAdjustmentService $orderAdjustments;
@@ -49,6 +51,7 @@ final class App
         $this->saleManagement = new SaleManagementService();
         $this->pixBacen = new PixBacenService();
         $this->releases = new ReleaseService($basePath);
+        $this->installers = new InstallerService($basePath);
         $this->checkout = new CheckoutService(
             $basePath,
             $this->pagBank,
@@ -204,6 +207,10 @@ final class App
                 $this->accountPage();
                 return;
             }
+            if ($method === 'GET' && preg_match('#^/minha-conta/baixar-exe/([0-9A-Za-z.+-]+)$#D', $path, $match)) {
+                $this->downloadCustomerInstaller($match[1]);
+                return;
+            }
             if ($method === 'GET' && preg_match('#^/minha-conta/baixar/([0-9A-Za-z.+-]+)$#D', $path, $match)) {
                 $this->downloadCustomerRelease($match[1]);
                 return;
@@ -227,6 +234,10 @@ final class App
             }
             if ($method === 'POST' && $path === '/admin/releases/publicar') {
                 $this->adminPublishRelease();
+                return;
+            }
+            if ($method === 'POST' && preg_match('#^/admin/installers/(\d+)/(ativar|desativar)$#', $path, $m)) {
+                $this->adminInstallerAction((int) $m[1], $m[2]);
                 return;
             }
             if ($method === 'POST' && preg_match('#^/admin/releases/(\d+)/(ativar|desativar)$#', $path, $m)) {
@@ -473,6 +484,7 @@ final class App
         }
 
         $release = $this->releases->latestActive();
+        $installer = $this->installers->latestActive();
 
         $this->render('account', [
             'title' => 'Minha conta — Caption IA',
@@ -481,6 +493,10 @@ final class App
             'release' => $release,
             'release_allowed' => $license && $release
                 ? $this->licenses->versionAllowed($license, (string)$release['version'])
+                : false,
+            'installer' => $installer,
+            'installer_allowed' => $license && $installer
+                ? $this->licenses->versionAllowed($license, (string)$installer['version'])
                 : false,
             'devices' => $devices,
             'orders' => $this->checkout->ordersForUser((int) $user['id']),
@@ -513,6 +529,31 @@ final class App
         header('Content-Disposition: attachment; filename="CaptionIA-' . $release['version'] . '.zip"');
         header('Cache-Control: private, no-store');
         header('X-Content-Type-Options: nosniff');
+        readfile($file);
+    }
+
+    /**
+     * Executável para instalação MANUAL no Windows. Não exposto no updater CEP.
+     * Download autenticado por sessão + licença, com conteúdo privado e nosniff.
+     */
+    private function downloadCustomerInstaller(string $version): void
+    {
+        $user = $this->auth->requireUser();
+        $license = $this->licenses->activeLicenseForUser((int) $user['id']);
+        $installer = $this->installers->findActiveByVersion($version);
+        if (!$installer) {
+            Json::send(['ok' => false, 'error' => 'Instalador não disponível.'], 404);
+        }
+        if (!$license || !$this->licenses->versionAllowed($license, (string) $installer['version'])) {
+            Json::send(['ok' => false, 'error' => 'Sua licença não permite baixar esta versão.'], 403);
+        }
+        $file = $this->installers->absolutePath($installer);
+        header('Content-Type: application/octet-stream');
+        header('Content-Length: ' . (string) filesize($file));
+        header('Content-Disposition: attachment; filename="CaptionIA-Instalador-' . $installer['version'] . '.exe"');
+        header('Cache-Control: private, no-store');
+        header('X-Content-Type-Options: nosniff');
+        header('X-Download-Options: noopen');
         readfile($file);
     }
 
@@ -572,6 +613,7 @@ final class App
             'orders' => $orders,
             'plans' => $plans,
             'releases' => $this->releases->listAll(),
+            'installers' => $this->installers->listAll(),
             'paymentSettings' => $this->settings->paymentSettings(),
             'pagbankConfigured' => $this->pagBank->configured(),
         ]);
@@ -742,25 +784,56 @@ final class App
         Csrf::validate($_POST['_csrf'] ?? null);
         $admin = $this->auth->requireAdmin();
 
-        $release = $this->releases->publishUploaded(
-            $_FILES['release_zip'] ?? [],
-            (string) ($_POST['version'] ?? ''),
-            (string) ($_POST['notes'] ?? '')
-        );
+        $zip = $_FILES['release_zip'] ?? [];
+        $exe = $_FILES['release_exe'] ?? [];
+        $hasZip = (int) ($zip['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_NO_FILE;
+        $hasExe = (int) ($exe['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_NO_FILE;
+        if (!$hasZip && !$hasExe) {
+            throw new RuntimeException('Selecione o ZIP para atualização automática, o instalador EXE ou ambos.');
+        }
+
+        $version = (string) ($_POST['version'] ?? '');
+        $notes = (string) ($_POST['notes'] ?? '');
+        $published = [];
+        $audit = ['version' => trim($version), 'formats' => []];
+
+        // EXE is stored separately. Never expose an executable to the CEP updater.
+        if ($hasExe) {
+            $installer = $this->installers->publishUploaded($exe, $version, $notes);
+            $published[] = 'instalador EXE para download manual';
+            $audit['formats']['exe'] = ['sha256' => $installer['sha256'], 'file_size' => (int) $installer['file_size']];
+        }
+        if ($hasZip) {
+            $release = $this->releases->publishUploaded($zip, $version, $notes);
+            $published[] = 'ZIP para atualização automática';
+            $audit['formats']['zip'] = ['sha256' => $release['sha256'], 'file_size' => (int) $release['file_size']];
+        }
 
         Database::connection()->prepare(
             'INSERT INTO audit_logs (user_id,event_type,metadata_json,created_at)
              VALUES (?,\'release.published\',?,NOW())'
         )->execute([
             $admin['id'],
-            json_encode([
-                'version' => $release['version'],
-                'sha256' => $release['sha256'],
-                'file_size' => (int) $release['file_size'],
-            ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+            json_encode($audit, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
         ]);
+        Session::flash('success', 'Versão ' . trim($version) . ': ' . implode(' e ', $published) . ' publicado(s).');
+        $this->redirect('/admin');
+    }
 
-        Session::flash('success', 'Atualização ' . $release['version'] . ' publicada para o atualizador automático.');
+    private function adminInstallerAction(int $installerId, string $action): void
+    {
+        Csrf::validate($_POST['_csrf'] ?? null);
+        $admin = $this->auth->requireAdmin();
+        $active = $action === 'ativar';
+        $this->installers->setActive($installerId, $active);
+        Database::connection()->prepare(
+            'INSERT INTO audit_logs (user_id,event_type,metadata_json,created_at)
+             VALUES (?,\'installer.status_changed\',?,NOW())'
+        )->execute([
+            $admin['id'],
+            json_encode(['installer_id' => $installerId, 'active' => $active], JSON_UNESCAPED_UNICODE),
+        ]);
+        Session::flash('success', $active ? 'Instalador EXE ativado.' : 'Instalador EXE desativado.');
         $this->redirect('/admin');
     }
 
