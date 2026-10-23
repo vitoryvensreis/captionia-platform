@@ -55,21 +55,35 @@ $planUrl = static function (array $plan): string {
 
 <section class="panel" style="margin-bottom:18px;">
   <h2>Instalar ou atualizar o Caption IA</h2>
-  <?php if (!empty($release_allowed) && !empty($release)): ?>
-    <p>Versão disponível: <strong><?= View::e($release['version']) ?></strong></p>
-    <p class="muted">O instalador inclui o plugin e seus recursos. Faça login no Premiere com a mesma conta para ativar a licença. A transcrição e a montagem utilizam sua chave Groq vinculada à conta, sem configurar o Keychain.</p>
+  <?php if (!empty($installer_allowed) && !empty($installer)): ?>
+    <p>Instalador para Windows: <strong><?= View::e($installer['version']) ?></strong></p>
+    <p class="muted">Baixe o instalador .EXE e execute no seu Windows após fechar o Premiere. Arquivos EXE não são instalados automaticamente pelo painel do Premiere.</p>
     <div class="account-actions">
-      <a class="button" href="/minha-conta/baixar/<?= View::e(rawurlencode((string)$release['version'])) ?>">
-        <i class="bi bi-download"></i> Baixar Caption IA <?= View::e($release['version']) ?> para Windows
-      </a>
-      <a class="button button-ghost" href="/minha-conta/baixar/<?= View::e(rawurlencode((string)$release['version'])) ?>">
-        <i class="bi bi-apple"></i> Baixar arquivos para Mac (instalação manual)
+      <a class="button" href="/minha-conta/baixar-exe/<?= View::e(rawurlencode((string)$installer['version'])) ?>">
+        <i class="bi bi-windows"></i> Baixar instalador .EXE — <?= View::e($installer['version']) ?>
       </a>
     </div>
-    <p class="muted">Windows: extraia o ZIP, feche o Premiere e execute INSTALAR_CAPTION_IA.bat. Mac: extraia a pasta CaptionIA desse mesmo ZIP e copie para ~/Library/Application Support/Adobe/CEP/extensions/. Veja o tutorial. O pacote para Mac ainda não é assinado/notarizado.</p>
+    <p class="muted">O EXE pode exibir um aviso do Windows SmartScreen se não possuir assinatura digital.</p>
+  <?php elseif (!empty($installer) && !empty($license)): ?>
+    <p class="muted">Sua licença ainda não permite baixar a versão <?= View::e($installer['version']) ?> do instalador Windows.</p>
+  <?php endif; ?>
+
+  <?php if (!empty($release_allowed) && !empty($release)): ?>
+    <p>Pacote ZIP: <strong><?= View::e($release['version']) ?></strong></p>
+    <p class="muted">O ZIP é utilizado pelo atualizador automático do Caption IA. Você também pode instalar manualmente pelo Windows ou Mac.</p>
+    <div class="account-actions">
+      <a class="button button-ghost" href="/minha-conta/baixar/<?= View::e(rawurlencode((string)$release['version'])) ?>">
+        <i class="bi bi-download"></i> Baixar ZIP — <?= View::e($release['version']) ?>
+      </a>
+      <a class="button button-ghost" href="/minha-conta/baixar/<?= View::e(rawurlencode((string)$release['version'])) ?>">
+        <i class="bi bi-apple"></i> Arquivos para Mac
+      </a>
+    </div>
+    <p class="muted">Windows via ZIP: extraia e execute INSTALAR_CAPTION_IA.bat. Mac: copie a pasta CaptionIA para ~/Library/Application Support/Adobe/CEP/extensions/.</p>
   <?php elseif (!empty($release) && !empty($license)): ?>
-    <p>O download da versão atual não está incluído na sua licença. Consulte sua assinatura.</p>
-  <?php else: ?>
+    <p class="muted">O pacote ZIP desta versão não está incluído na sua licença.</p>
+  <?php endif; ?>
+  <?php if (empty($installer) && empty($release)): ?>
     <p class="muted">O instalador será disponibilizado após a publicação de uma versão autorizada.</p>
   <?php endif; ?>
 </section>
