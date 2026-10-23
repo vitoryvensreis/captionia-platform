@@ -34,6 +34,9 @@ jobs:
         run: |
           find app public views scripts tests -type f -name '*.php' -print0 | xargs -0 -n1 php -l
 
+      - name: Windows installer publish/download regression
+        run: php tests/installer_release_test.php
+
       - name: BYOK Groq encryption and zero-leak regression
         run: php tests/user_groq_service_test.php
 

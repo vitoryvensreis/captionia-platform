@@ -6,3 +6,7 @@
 !/storage/cache/.gitkeep
 .DS_Store
 Thumbs.db
+
+# Private release binaries (served only through authenticated PHP routes)
+/storage/releases/*.zip
+/storage/installers/*.exe
