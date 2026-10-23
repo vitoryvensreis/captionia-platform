@@ -188,7 +188,7 @@
   <div class="panel-title-row">
     <div>
       <h2>Atualizações do plugin</h2>
-      <p>Publique o ZIP oficial para que o Caption IA baixe e aplique a nova versão automaticamente.</p>
+      <p>Publique o ZIP para atualização automática no Premiere e/ou o instalador EXE para download manual no Windows.</p>
     </div>
     <span class="status"><?= count($releases) ?> release(s)</span>
   </div>
@@ -200,8 +200,11 @@
       <label>Versão
         <input name="version" placeholder="3.4.0" pattern="[0-9]+\.[0-9]+\.[0-9]+(?:[-+][0-9A-Za-z.-]+)?" required>
       </label>
-      <label>ZIP da versão
-        <input name="release_zip" type="file" accept=".zip,application/zip" required>
+      <label>ZIP — atualização automática (opcional)
+        <input name="release_zip" type="file" accept=".zip,application/zip">
+      </label>
+      <label>EXE — instalador Windows (opcional)
+        <input name="release_exe" type="file" accept=".exe,application/vnd.microsoft.portable-executable,application/octet-stream">
       </label>
     </div>
 
@@ -210,12 +213,16 @@
     </label>
 
     <div class="settings-help">
-      O ZIP deve ser o pacote oficial gerado pelo repositório do plugin e conter a pasta <code>CaptionIA/</code>.
-      O servidor calcula SHA-256 e o plugin valida a integridade antes de preparar a atualização.
+      Envie pelo menos um arquivo. <strong>ZIP</strong>: pacote oficial com <code>CaptionIA/</code>, usado pelo atualizador automático no Premiere.
+      <strong>EXE</strong>: instalador Windows para download manual pelo cliente, nunca executado pelo servidor nem enviado ao atualizador automático.
+      Ambos são armazenados fora da pasta pública, com verificação de integridade SHA-256 e limite de 512 MB por arquivo.
+      A versão deve corresponder ao manifest do ZIP (quando houver ZIP).
     </div>
 
-    <button class="button" type="submit">Publicar atualização</button>
+    <button class="button" type="submit">Publicar versão / instalador</button>
   </form>
+
+  <p class="muted">Você pode atualizar apenas o EXE de uma versão já publicada sem substituir seu ZIP, ou publicar ambos no mesmo envio.</p>
 
   <?php if ($releases): ?>
     <div class="table-wrap">
@@ -247,6 +254,42 @@
     </div>
   <?php else: ?>
     <p class="muted">Nenhuma atualização publicada ainda.</p>
+  <?php endif; ?>
+  <div class="panel-title-row" style="margin-top:22px;">
+    <div>
+      <h3>Instaladores Windows (.exe)</h3>
+      <p>Arquivos para instalação manual. Não alteram o feed de atualizações automáticas do plugin.</p>
+    </div>
+    <span class="status"><?= count($installers ?? []) ?> instalador(es)</span>
+  </div>
+  <?php if (!empty($installers)): ?>
+    <div class="table-wrap">
+      <table class="responsive-table">
+        <thead><tr><th>Versão</th><th>Tamanho</th><th>SHA-256</th><th>Publicada</th><th>Status</th><th>Ação</th></tr></thead>
+        <tbody>
+        <?php foreach ($installers as $installer): ?>
+          <tr>
+            <td data-label="Versão"><b><?= View::e($installer['version']) ?> .exe</b></td>
+            <td data-label="Tamanho"><?= number_format(((int)($installer['file_size'] ?? 0)) / 1048576, 1, ',', '.') ?> MB</td>
+            <td data-label="SHA-256"><code title="<?= View::e($installer['sha256'] ?? '') ?>"><?= View::e(substr((string)($installer['sha256'] ?? ''), 0, 12)) ?>…</code></td>
+            <td data-label="Publicada"><?= View::e(date('d/m/Y H:i', strtotime($installer['published_at']))) ?></td>
+            <td data-label="Status"><span class="status <?= (int)$installer['active'] === 1 ? 'status-paid' : '' ?>"><?= (int)$installer['active'] === 1 ? 'Ativo' : 'Inativo' ?></span></td>
+            <td data-label="Ação">
+              <form method="post" action="/admin/installers/<?= (int)$installer['id'] ?>/<?= (int)$installer['active'] === 1 ? 'desativar' : 'ativar' ?>">
+                <input type="hidden" name="_csrf" value="<?= View::e($csrf) ?>">
+                <button class="mini-button" type="submit"><?= (int)$installer['active'] === 1 ? 'Desativar' : 'Ativar' ?></button>
+              </form>
+            </td>
+          </tr>
+          <?php if (!empty($installer['notes'])): ?>
+          <tr class="release-notes-row"><td colspan="6"><small><?= nl2br(View::e($installer['notes'])) ?></small></td></tr>
+          <?php endif; ?>
+        <?php endforeach; ?>
+        </tbody>
+      </table>
+    </div>
+  <?php else: ?>
+    <p class="muted">Nenhum EXE publicado ainda.</p>
   <?php endif; ?>
 </section>
 
