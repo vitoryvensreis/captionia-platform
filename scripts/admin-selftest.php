@@ -74,7 +74,7 @@ $rawGateway = $settingStmt->fetchColumn();
 // The live SettingsService supports a fallback for missing/unknown stored
 // gateway values. Smoke tests must check the same effective behavior instead
 // of rejecting a healthy application. Do not modify payment configuration.
-$paymentGateway = (new \\CaptionIA\\Services\\SettingsService())->paymentGateway();
+$paymentGateway = (new \CaptionIA\Services\SettingsService())->paymentGateway();
 if (!in_array($paymentGateway, ['pagbank', 'bacen_pix'], true)) {
     fwrite(STDERR, "payment_gateway efetivo não suportado." . PHP_EOL);
     exit(1);
