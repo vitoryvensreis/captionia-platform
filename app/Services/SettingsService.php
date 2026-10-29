@@ -48,6 +48,10 @@ final class SettingsService
     public function paymentGateway(): string
     {
         $gateway = strtolower((string) $this->get('payment_gateway', Env::get('PAYMENT_GATEWAY', 'bacen_pix')));
+        if ($gateway === 'asaas' && !AsaasService::paymentsEnabled()) {
+            // Keep the previous live Pix flow until Asaas has been homologated.
+            return 'bacen_pix';
+        }
         return in_array($gateway, ['asaas', 'pagbank', 'bacen_pix'], true) ? $gateway : 'bacen_pix';
     }
 
