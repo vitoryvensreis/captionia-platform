@@ -27,6 +27,16 @@ final class AsaasService
         $this->apiKey = trim(Env::get('ASAAS_API_KEY', '') ?: '');
     }
 
+    /**
+     * Explicit production gate: credentials alone do not authorize taking new
+     * payments. Existing webhook notifications can still reconcile obligations.
+     * Must be enabled only after end-to-end sandbox verification.
+     */
+    public static function paymentsEnabled(): bool
+    {
+        return in_array(strtolower(trim(Env::get('ASAAS_PAYMENTS_ENABLED', 'false') ?: 'false')), ['1', 'true', 'yes', 'on'], true);
+    }
+
     public function configured(): bool
     {
         return $this->apiKey !== '' && strlen(trim(Env::get('ASAAS_WEBHOOK_TOKEN', '') ?: '')) >= 32;
