@@ -15,6 +15,11 @@ $assert = static function (bool $ok, string $message): void {
 $_SERVER['ASAAS_ENV'] = 'sandbox';
 $_SERVER['ASAAS_API_KEY'] = 'sandbox-key-test-only';
 $_SERVER['ASAAS_WEBHOOK_TOKEN'] = str_repeat('Ab19', 12);
+$_SERVER['ASAAS_PAYMENTS_ENABLED'] = 'false';
+$assert(!AsaasService::paymentsEnabled(), 'Asaas payment activation must default to disabled.');
+$_SERVER['ASAAS_PAYMENTS_ENABLED'] = 'true';
+$assert(AsaasService::paymentsEnabled(), 'Explicit Asaas activation flag rejected.');
+$_SERVER['ASAAS_PAYMENTS_ENABLED'] = 'false';
 $asaas = new AsaasService();
 
 $assert($asaas->configured(), 'Gateway should be configured with both secrets.');
