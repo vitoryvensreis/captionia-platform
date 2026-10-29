@@ -14,7 +14,8 @@ final class CheckoutService
         private readonly PagBankService $pagBank,
         private readonly LicenseService $licenses,
         private readonly SettingsService $settings,
-        private readonly PixBacenService $pixBacen
+        private readonly PixBacenService $pixBacen,
+        private readonly AsaasCheckoutService $asaasCheckout
     ) {
     }
 
@@ -30,9 +31,11 @@ final class CheckoutService
 
     public function createForUser(array $user, array $plan): array
     {
-        return $this->settings->paymentGateway() === 'bacen_pix'
-            ? $this->createBacenPixForUser($user, $plan)
-            : $this->createHostedCheckoutForUser($user, $plan);
+        return match ($this->settings->paymentGateway()) {
+            'asaas' => $this->asaasCheckout->createForUser($user, $plan),
+            'bacen_pix' => $this->createBacenPixForUser($user, $plan),
+            default => $this->createHostedCheckoutForUser($user, $plan),
+        };
     }
 
     public function createBacenPixForUser(array $user, array $plan): array
@@ -240,6 +243,10 @@ final class CheckoutService
         $order = $this->findByReference($reference);
         if (!$order) {
             return null;
+        }
+
+        if (str_starts_with((string) ($order['provider_mode'] ?? ''), 'asaas_')) {
+            return $this->asaasCheckout->sync($order);
         }
 
         if (

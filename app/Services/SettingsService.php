@@ -48,7 +48,7 @@ final class SettingsService
     public function paymentGateway(): string
     {
         $gateway = strtolower((string) $this->get('payment_gateway', Env::get('PAYMENT_GATEWAY', 'bacen_pix')));
-        return $gateway === 'pagbank' ? 'pagbank' : 'bacen_pix';
+        return in_array($gateway, ['asaas', 'pagbank', 'bacen_pix'], true) ? $gateway : 'bacen_pix';
     }
 
     public function pixKey(): string
@@ -79,7 +79,7 @@ final class SettingsService
     public function savePaymentSettings(string $gateway, string $pixKey, string $pixName, string $pixCity): void
     {
         $gateway = strtolower(trim($gateway));
-        if (!in_array($gateway, ['pagbank', 'bacen_pix'], true)) {
+        if (!in_array($gateway, ['asaas', 'pagbank', 'bacen_pix'], true)) {
             throw new RuntimeException('Forma de pagamento inválida.');
         }
 

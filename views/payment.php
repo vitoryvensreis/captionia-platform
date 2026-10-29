@@ -5,6 +5,7 @@ $isPaid = $status === 'paid';
 $isFinal = in_array($status, ['paid','declined','cancelled','expired','failed'], true);
 $isHosted = ($order['provider_mode'] ?? '') === 'hosted_checkout';
 $isBacen = ($order['provider_mode'] ?? '') === 'bacen_static_pix';
+$isAsaas = str_starts_with((string) ($order['provider_mode'] ?? ''), 'asaas_');
 
 $whatsappUrl = null;
 if ($isBacen && !$isPaid) {
@@ -62,6 +63,20 @@ if ($isBacen && !$isPaid) {
       integrity="sha512-CNgIRecGo7nphbeZ04Sc13ka07paqdeTu0WR1IM4kNcpmBAUSHSQX0FslNhTDadL4O5SAGapGt4FodqL8My0mA=="
       crossorigin="anonymous"
       referrerpolicy="no-referrer"></script>
+  <?php elseif ($isAsaas): ?>
+    <div class="checkout-summary">
+      <div><span>Plano</span><b><?= View::e($order['plan_name']) ?></b></div>
+      <div><span>Valor</span><b>R$ <?= number_format(((int) $order['amount_cents']) / 100, 2, ',', '.') ?></b></div>
+      <div><span>Status</span><b>Aguardando confirmação Asaas</b></div>
+    </div>
+    <a class="button button-wide" data-asaas-invoice <?= empty($order['hosted_checkout_url']) ? 'hidden' : '' ?>
+       href="<?= View::e($order['hosted_checkout_url'] ?: '#') ?>" rel="noopener noreferrer">
+       Abrir pagamento seguro Asaas
+    </a>
+    <div class="payment-wait">
+      <span class="spinner"></span>
+      <div><b>Aguardando pagamento...</b><small>Pix, cartão e boleto são disponibilizados pelo Asaas conforme sua conta. A licença será liberada automaticamente após confirmação.</small></div>
+    </div>
   <?php elseif ($isHosted): ?>
     <div class="checkout-summary">
       <div><span>Plano</span><b><?= View::e($order['plan_name']) ?></b></div>

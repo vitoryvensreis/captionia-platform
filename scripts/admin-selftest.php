@@ -44,6 +44,10 @@ $requiredColumns = [
     ['checkout_orders', 'provider_mode'],
     ['checkout_orders', 'pagbank_checkout_id'],
     ['checkout_orders', 'hosted_checkout_url'],
+    ['users', 'asaas_customer_id'],
+    ['checkout_orders', 'asaas_customer_id'],
+    ['checkout_orders', 'asaas_subscription_id'],
+    ['checkout_orders', 'asaas_payment_id'],
     ['plans', 'description'],
     ['plans', 'featured'],
     ['plans', 'sort_order'],
@@ -75,7 +79,7 @@ $rawGateway = $settingStmt->fetchColumn();
 // gateway values. Smoke tests must check the same effective behavior instead
 // of rejecting a healthy application. Do not modify payment configuration.
 $paymentGateway = (new \CaptionIA\Services\SettingsService())->paymentGateway();
-if (!in_array($paymentGateway, ['pagbank', 'bacen_pix'], true)) {
+if (!in_array($paymentGateway, ['pagbank', 'bacen_pix', 'asaas'], true)) {
     fwrite(STDERR, "payment_gateway efetivo não suportado." . PHP_EOL);
     exit(1);
 }

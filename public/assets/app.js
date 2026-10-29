@@ -82,6 +82,14 @@
         });
         const data = await response.json();
 
+        if (data.payment_url) {
+          const invoice = payment.querySelector('[data-asaas-invoice]');
+          if (invoice && invoice.href !== data.payment_url) {
+            invoice.href = data.payment_url;
+            invoice.hidden = false;
+          }
+        }
+
         if (data.paid && data.redirect) {
           window.location.href = data.redirect;
           return;
