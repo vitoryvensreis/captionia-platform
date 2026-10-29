@@ -94,6 +94,7 @@ final class App
                     'time' => date(DATE_ATOM),
                     'pagbank_configured' => $this->pagBank->configured(),
                     'asaas_configured' => $this->asaas->configured(),
+                    'asaas_payments_enabled' => AsaasService::paymentsEnabled(),
                     'pagbank_checkout_mode' => $this->pagBank->checkoutMode(),
                     'payment_gateway' => $this->settings->paymentGateway(),
                 ]);
@@ -394,7 +395,6 @@ final class App
             'plan' => $plan,
             'slug' => $slug,
             'pagbankConfigured' => $this->pagBank->configured(),
-            'asaasConfigured' => $this->asaas->configured(),
             'asaasConfigured' => $this->asaas->configured(),
             'paymentGateway' => $this->settings->paymentGateway(),
         ]);
@@ -716,6 +716,9 @@ final class App
         Csrf::validate($_POST['_csrf'] ?? null);
         $this->auth->requireAdmin();
 
+        if (($_POST['gateway'] ?? '') === 'asaas' && !AsaasService::paymentsEnabled()) {
+            throw new RuntimeException('Asaas está em homologação. Ative ASAAS_PAYMENTS_ENABLED somente após validar cobrança e webhook.');
+        }
         if (($_POST['gateway'] ?? '') === 'asaas' && !$this->asaas->configured()) {
             throw new RuntimeException('Configure ASAAS_API_KEY e ASAAS_WEBHOOK_TOKEN no .env antes de ativar.');
         }
